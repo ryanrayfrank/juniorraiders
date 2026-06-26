@@ -1,0 +1,9 @@
+# Private source material and the old single-file prototype - never publish these.
+input/
+output/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
+.vscode/

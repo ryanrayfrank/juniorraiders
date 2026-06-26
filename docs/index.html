@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Playbook Blitz</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- HOME -->
+  <section id="home" class="screen active">
+    <div class="homeWrap">
+      <div class="logo"><div class="blitz">PLAYBOOK <b>BLITZ</b></div><div class="sub">LEARN YOUR POSITION</div></div>
+      <div class="menu"><button class="btn gold hugeStart" id="startBtn">&#127944; LET'S GO</button></div>
+    </div>
+    <div class="tiny">A practice game for your playbook.<br>&#128421;&#65039; Arrow keys + Spacebar &nbsp;&bull;&nbsp; &#128241; Tap &amp; swipe<br>Best drive: <b id="bestHole">0</b> yards</div>
+  </section>
+
+  <!-- SETUP -->
+  <section id="setup" class="screen">
+    <div class="gbar"><button class="x" id="setupHome">&#10005;</button><div class="gbarTitle">PICK YOUR POSITION</div><div class="gbarSpacer"></div></div>
+    <div class="secLbl">&#127944; OFFENSE <small>&mdash; tap any player</small></div>
+    <div class="formBox" id="offBox"></div>
+    <div class="pickedTag" id="pickedTag">Tap a position to learn its job</div>
+    <div class="secLbl">&#128737;&#65039; DEFENSE</div>
+    <div class="formBox short" id="defBox"><div class="lockTag">&#128274; Coming soon</div></div>
+    <div class="secLbl">&#9881;&#65039; HOW HARD?</div>
+    <div class="levels" id="lvlPicks">
+      <div class="lvl" data-lvl="1"><b>TEACH</b><small>Slowest. Tells you your job.</small></div>
+      <div class="lvl" data-lvl="2"><b>READ</b><small>You pick the job.</small></div>
+      <div class="lvl" data-lvl="3"><b>GAME</b><small>Faster. No hints.</small></div>
+    </div>
+    <div class="menu startRow"><button class="btn gold" id="startPlayBtn" disabled>&#9654; START</button></div>
+  </section>
+
+  <!-- PLAY -->
+  <section id="play" class="screen">
+    <div class="gbar">
+      <button class="x" id="playHome">&#10005;</button>
+      <div class="stat"><b id="pYards">0</b><span>YARDS</span></div>
+      <div class="stat"><b id="pPlay">1/6</b><span>PLAY</span></div>
+      <div class="stat"><b id="pStreak">0&#128293;</b><span>STREAK</span></div>
+      <div class="gbarSpacer"></div>
+      <button class="speedBtn" id="speedBtn">&#9654; Normal</button>
+      <span class="chip" id="pChip">TB &middot; L1</span>
+    </div>
+    <div id="fieldWrap">
+      <canvas id="field"></canvas>
+      <div class="banner"><div class="play" id="pCall">&mdash;</div><div class="task" id="pTask">&mdash;</div></div>
+      <div class="combo" id="pCombo"></div>
+      <div id="cadWord"></div>
+    </div>
+
+    <!-- read step: pick your assignment -->
+    <div class="readChoices" id="readChoices"></div>
+
+    <!-- cadence -->
+    <div class="ctrlRow" id="snapRow"><button class="pad snap" id="snapBtn">&#127944; SNAP!</button></div>
+
+    <!-- live steering (ball carrier only) -->
+    <div class="ctrlRow" id="steerRow">
+      <button class="pad" id="steerL">&#9664;</button>
+      <button class="pad go" id="burstBtn">&#127939; GO</button>
+      <button class="pad" id="steerR">&#9654;</button>
+    </div>
+
+    <div class="swipeHint" id="pHint">&mdash;</div>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="result" class="screen">
+    <div class="resWrap">
+      <div class="resTitle" id="resTitle">DRIVE COMPLETE!</div>
+      <div class="scoreBig"><span id="resScore">0</span><small id="resUnit">TOTAL YARDS</small></div>
+      <div class="resRow" id="resRow"></div>
+      <div class="menu resMenu"><button class="btn gold" id="resAgain">&#9654; PLAY AGAIN</button><button class="btn ghost" id="resHome">&#127968; HOME</button></div>
+    </div>
+  </section>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
