@@ -10,9 +10,9 @@ extended with everything since.
 
 ## Phase 1 — Original single-file prototype (Microsoft Copilot)
 
-These are the decisions that produced the original `Playbook-Blitz-DEMO.html`
-(a single self-contained HTML file, now kept in the git-ignored `output/` folder
-for reference).
+These are the decisions that produced the original `Playbook-Blitz-DEMO.html` (a
+single self-contained HTML file). It lived in a local-only `output/` folder that
+has since been deleted; it is not in the repo.
 
 1. **The brief.** Build a game that teaches a youth football playbook to an
    11-year-old who is new to football and has ADHD. Likes Fortnite, snake.io.
@@ -79,6 +79,9 @@ for reference).
     cadence. Picking the wrong gap still counts against the READS accuracy stat.
 17. **Added this `decisions/` folder** (2026-06-26) as durable project memory so a
     new chat window can get fully up to speed without restarting.
+18. **Deleted the local `input/` and `output/` folders** (2026-06-26) — no longer
+    needed. They were already git-ignored (never in the repo); the `.gitignore`
+    rules stay as a safety net. Docs were updated to stop referencing them.
 
 ---
 

@@ -41,5 +41,6 @@ python -m http.server 8000 --directory docs
 - **Read** - you pick the assignment.
 - **Game** - faster, no hints.
 
-The `input/` (playbook PDFs) and `output/` (old prototype) folders are
-intentionally git-ignored and never published.
+The published site is entirely in `docs/`. (Source material and the old
+single-file prototype used to live in local-only `input/`/`output/` folders;
+those have since been removed and are git-ignored if ever recreated.)

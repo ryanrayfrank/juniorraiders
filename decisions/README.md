@@ -55,10 +55,13 @@ wherever he catches the ball carrier).
 Football/
 ├─ docs/            # the published game (GitHub Pages root)
 ├─ decisions/       # THIS folder — project memory & decisions
-├─ input/           # source playbook PDFs + images  (git-ignored, never published)
-├─ output/          # old single-file prototype + recap (git-ignored)
 └─ README.md        # short public-facing readme
 ```
+
+> Earlier there were local-only `input/` (playbook PDFs + images) and `output/`
+> (the old single-file prototype + conversation recap) folders. They've since been
+> deleted; both are still listed in `.gitignore` so they're never committed if
+> recreated.
 
 See [`architecture.md`](architecture.md) for how the code is organized.
 

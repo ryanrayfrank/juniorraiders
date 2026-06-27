@@ -72,6 +72,7 @@ Then load https://ryanrayfrank.github.io/juniorraiders/ and hard-refresh.
 
 ## What is NOT deployed
 
-`input/` (the source playbook PDFs + images) and `output/` (the old single-file
-prototype + the conversation recap) are **git-ignored** and never published. Only
-`docs/` (and the markdown like this folder + the root `README.md`) is in the repo.
+Only `docs/` (plus the markdown: this `decisions/` folder + the root `README.md`)
+is in the repo and published. There used to be local-only `input/` (source
+playbook PDFs + images) and `output/` (old prototype + recap) folders; they've
+been deleted and remain in `.gitignore` so they're never committed if recreated.
