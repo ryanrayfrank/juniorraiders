@@ -40,7 +40,9 @@ export function buildFormation(W, H, losY, side) {
 
   // Defense: 3-5-3.
   const defense = [];
-  const dlY = losY - 34, lbY = losY - 78, cbY = losY - 122, sY = losY - 156;
+  // Defense sits a touch further off the ball so the pre-snap gap numbers (drawn
+  // right at the line of scrimmage) stay visible and aren't covered by the D-line.
+  const dlY = losY - 44, lbY = losY - 88, cbY = losY - 132, sY = losY - 166;
   defense.push(mk("E", "DL", "DEF", cx - 2 * SP, dlY));
   defense.push(mk("N", "DL", "DEF", cx, dlY));
   defense.push(mk("E", "DL", "DEF", cx + 2 * SP, dlY));

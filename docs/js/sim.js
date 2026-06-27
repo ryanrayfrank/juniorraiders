@@ -322,18 +322,18 @@ export class Sim {
     }
     ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, this.losY); ctx.lineTo(W, this.losY); ctx.stroke();
 
-    if (this.phase === "gapselect") this.drawGaps();
-
     for (const p of this.players) this.drawPlayer(p);
     // ball marker on the carrier
     if (this.carrier) { const c = this.carrier; ctx.fillStyle = "#7a3b12"; ctx.beginPath(); ctx.ellipse(c.x, c.y, 6, 4, 0, 0, 7); ctx.fill(); }
+    // gap numbers last so they always sit on top and stay readable
+    if (this.phase === "gapselect") this.drawGaps();
   }
 
   // Numbered hole markers shown while the carrier picks his gap. The selected
   // hole pulses gold; in Teach mode the correct hole is tinted green.
   drawGaps() {
     const ctx = this.ctx;
-    const y = this.losY - 30;
+    const y = this.losY - 16; // right at the line, in the clear band below the D-line
     const correctHole = this.play ? this.play.hole : null;
     ctx.font = "bold 13px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     this.gaps.forEach((g, i) => {
@@ -341,7 +341,7 @@ export class Sim {
       const correct = this.showCorrectGap && g.hole === correctHole;
       const rad = sel ? 13 : 10;
       ctx.beginPath(); ctx.arc(g.x, y, rad, 0, 7);
-      ctx.fillStyle = sel ? "#ffd23f" : (correct ? "#27d17c" : "rgba(0,0,0,.45)");
+      ctx.fillStyle = sel ? "#ffd23f" : (correct ? "#27d17c" : "rgba(0,0,0,.72)");
       ctx.fill();
       ctx.lineWidth = sel ? 2 : 1;
       ctx.strokeStyle = sel ? "#fff" : (correct ? "#aef5cf" : "rgba(255,255,255,.5)");
