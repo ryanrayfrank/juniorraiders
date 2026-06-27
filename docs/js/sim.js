@@ -8,8 +8,8 @@
 // nobody is ever "run through," and yards = how far the carrier actually got.
 // ===========================================================================
 
-import { buildFormation, holeX, PLAYER_R } from "./formations.js?v=32";
-import { assignmentFor, actionType } from "./plays.js?v=32";
+import { buildFormation, holeX, PLAYER_R } from "./formations.js?v=33";
+import { assignmentFor, actionType } from "./plays.js?v=33";
 
 const SPEED = { QB: 140, FB: 150, TB: 155, OL: 135, WR: 150, DL: 120, LB: 150, DB: 170 };
 
@@ -129,11 +129,11 @@ export class Sim {
     const qb = offense.find((o) => o.label === "QB");
     this.qb = qb;
     this.carrier = offense.find((o) => o.label === play.carrier);
-    this.ball = { carrierId: qb.id, handoffAt: play.type === "DIVE" ? 0.34 : 0.62 };
-    // Reverse-pivot handoff: the QB drops back to meet the deep back. On a dive
-    // the mesh is shallow (quick hitter); on a lead/power it's deeper so the TB
-    // takes it behind the FB and can follow him through the hole.
-    this.meshX = cx; this.meshY = this.losY + (play.carrier === "FB" ? 48 : 66);
+    // Quick handoff so the back doesn't stand around in the backfield (the user
+    // holds SPRINT and expects to GO). The mesh is shallow and the handoff fires
+    // early; proximity can trigger it even sooner if the back rushes up.
+    this.ball = { carrierId: qb.id, handoffAt: play.type === "DIVE" ? 0.1 : 0.18 };
+    this.meshX = cx; this.meshY = this.losY + (play.carrier === "FB" ? 24 : 34);
 
     // Fake (boot/misdirection): the non-carrying back carries out a fake to pull
     // defenders away from the ball. If the human IS the faker they pick the fake
@@ -314,7 +314,7 @@ export class Sim {
     // Holding SPRINT (player carrier) also closes the mesh faster, so the back
     // takes the handoff sooner and the burst feels immediate instead of waiting
     // a beat or two for the handoff to finish.
-    const meshBoost = (this.isPlayerCarrier && this.burst) ? 1.5 : 1;
+    const meshBoost = (this.isPlayerCarrier && this.burst) ? 1.8 : 1;
 
     // --- offense ---
     for (const o of this.offense) {
@@ -341,20 +341,21 @@ export class Sim {
           // Not yet engaged: close to the defender's ball-side shoulder.
           this.moveToward(o, tgt.x + ux * reach, tgt.y + uy * reach, st);
         } else {
-          // Engaged: lock on and hold the block. Once locked we STAY locked and
-          // ease into position (no distance-threshold toggling, no teleporting the
-          // defender to the far side) - that feedback loop was the "rumble" when
-          // the lines met. The pair is then driven slowly back off the ball.
+          // Engaged: lock on and DRIVE the defender straight back off the line.
+          // The drive direction is FIXED (straight upfield), NOT the live ball
+          // vector. When the ball carrier is right on top of the pile, that vector
+          // swings wildly each frame and the blocker whips around the defender -
+          // THAT was the big jitter. Here the blocker just rides the ball-side
+          // (just below) of the defender and shoves him upfield; they move together
+          // laterally. Stable no matter where the carrier is.
           o.locked = true;
           tgt.engaged = true; tgt.engagedBy = o.id;
           const k = Math.min(1, st * 10);
-          o.x += (tgt.x + ux * reach - o.x) * k;
-          o.y += (tgt.y + uy * reach - o.y) * k;
-          tgt.x = o.x - ux * reach;
-          tgt.y = o.y - uy * reach;
-          const drive = o.speed * st * 0.14; // win a little ground each frame
-          o.x -= ux * drive; o.y -= uy * drive;
-          tgt.x -= ux * drive; tgt.y -= uy * drive;
+          o.x += (tgt.x - o.x) * k;             // line up under the defender (eased)
+          o.y += (tgt.y + reach - o.y) * k;     // stay on the ball side (just below)
+          const drive = o.speed * st * 0.12;    // win a little ground each frame
+          tgt.y -= drive;                       // push him straight back
+          tgt.x = o.x;                          // keep the pair together laterally
         }
       } else if (o.action === "FAKE") {
         // sell the fake: sprint toward the fake gap, away from the real ball

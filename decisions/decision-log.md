@@ -275,6 +275,22 @@ has since been deleted; it is not in the repo.
     size never legitimately changes mid-play). If this still shows a rumble, first
     confirm the corner badge reads the latest build (stale cache).
 
+32. **Real jitter cause found + backfield pause fixed** (2026-06-27, build v33):
+    GIFs (on confirmed build v32) showed render smoothing only "subsided" the
+    jitter and the TB pausing in the backfield.
+    - **Big jitter = blockers pivoting around the live ball.** Each engaged blocker
+      aimed "between his man and the ball carrier" *every frame*; when the carrier
+      sat on top of the pile, that direction vector swung wildly and the whole pile
+      whipped around (a large physics oscillation smoothing can't hide). Engaged
+      blockers now drive their man **straight upfield with a fixed direction** (ride
+      the ball-side, shove back, move together laterally) - stable wherever the
+      carrier is.
+    - **Backfield pause = slow, deep, time-gated handoff.** The QB reverse-pivoted
+      to a deep mesh and the handoff was gated to ~0.62 sim-time (~1.5s real), so
+      the back stood waiting even while SPRINT was held. Mesh is now shallow and
+      `handoffAt` is 0.1/0.18 (dive/lead-power); `meshBoost` (holding SPRINT) raised
+      to 1.8 so the back takes the ball and goes almost immediately.
+
 ## Open / not yet done
 
 - Per-position coaching for the **rest of the offense** (currently the carrier
