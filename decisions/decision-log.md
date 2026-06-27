@@ -188,6 +188,17 @@ has since been deleted; it is not in the repo.
       Fast** (was Normal → Fast → Slower) and defaults to Normal. "Slower" renamed
       to "Slow".
 
+26. **Smoother sprint run + numberless gaps on L2/L3** (2026-06-27):
+    - **Sprint "glitch" (wobble) removed** — the ball carrier's daylight steering
+      was hard-aiming at the single nearest defender, so it flipped left/right as
+      the nearest one changed (the SPRINT boost made the wobble obvious). It now
+      sums a closeness-weighted "drift away" from *every* free defender ahead into
+      one smooth steer, so the run is fluid while sprinting.
+    - **Gap numbers hidden in Read (L2) & Game (L3)** — the pre-snap hole markers
+      and sliding selector still show, but the numbers are only drawn in Teach
+      (L1). On the harder levels the player has to learn to read the gap by where
+      it sits in the line. (A wrong pick in L2 still names the right hole after.)
+
 ## Open / not yet done
 
 - Per-position coaching for the **rest of the offense** (currently the carrier

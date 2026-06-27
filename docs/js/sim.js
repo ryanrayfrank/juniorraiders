@@ -385,20 +385,24 @@ export class Sim {
     let tx, ty;
     if (c.y > this.losY - 6) { tx = this.gapX; ty = this.losY - 14; }
     else {
-      // Climb to daylight: only steer around a free defender who is actually
-      // AHEAD of the back and close. Ignoring defenders behind/beside him keeps
-      // the run smooth (no left-right jitter as he passes them, which the SPRINT
-      // boost used to amplify).
-      let nd = null, bd = Infinity;
+      // Past the line, climb to daylight. Steer away from EVERY free defender
+      // ahead of the back, weighted by how close he is, and sum it into one
+      // smooth drift. Blending all threats (instead of hard-aiming at the single
+      // nearest one) stops the left-right wobble/"glitch" that the SPRINT boost
+      // used to amplify.
+      let push = 0;
       for (const d of this.defense) {
         if (d.engaged) continue;
-        if (d.y > c.y - c.r) continue; // skip anyone level with or behind the back
+        if (d.y > c.y - c.r) continue;        // only defenders ahead of the back
         const dd = dist(d.x, d.y, c.x, c.y);
-        if (dd < bd) { bd = dd; nd = d; }
+        if (dd > 95) continue;
+        const w = (95 - dd) / 95;             // closer = stronger
+        push += (c.x >= d.x ? 1 : -1) * w;    // drift away from him
       }
-      const dodge = (nd && bd < 80) ? (c.x < nd.x ? -1 : 1) * 22 : 0;
-      tx = Math.max(c.r, Math.min(this.W - c.r, c.x + dodge)); ty = 0;
+      push = Math.max(-1, Math.min(1, push));
+      tx = c.x + push * 30; ty = 0;
     }
+    tx = Math.max(c.r, Math.min(this.W - c.r, tx));
     this.moveToward(c, tx, ty, st, (this.botch ? 0.7 : 1) * boost);
     c.x = Math.max(c.r, Math.min(this.W - c.r, c.x));
   }
@@ -485,11 +489,14 @@ export class Sim {
     ctx.restore();
   }
 
-  // Numbered hole markers shown while the carrier picks his gap. The selected
-  // hole pulses gold; in Teach mode the correct hole is tinted green.
+  // Hole markers shown while the carrier picks his gap. The selected hole pulses
+  // gold; in Teach (L1) the correct hole is tinted green and every gap shows its
+  // number. In Read (L2) and Game (L3) the NUMBERS are hidden so the player has
+  // to learn to read the gaps by where they sit in the line.
   drawGaps() {
     const ctx = this.ctx;
     const y = this.losY - 16; // right at the line, in the clear band below the D-line
+    const showNumbers = (this.gameLevel || 1) === 1;
     const correctHole = this.gapCorrectHole != null ? this.gapCorrectHole : (this.play ? this.play.hole : null);
     ctx.font = "bold 13px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     this.gaps.forEach((g, i) => {
@@ -502,8 +509,10 @@ export class Sim {
       ctx.lineWidth = sel ? 2 : 1;
       ctx.strokeStyle = sel ? "#fff" : (correct ? "#aef5cf" : "rgba(255,255,255,.5)");
       ctx.stroke();
-      ctx.fillStyle = (sel || correct) ? "#111" : "#fff";
-      ctx.fillText(String(g.hole), g.x, y);
+      if (showNumbers) {
+        ctx.fillStyle = (sel || correct) ? "#111" : "#fff";
+        ctx.fillText(String(g.hole), g.x, y);
+      }
     });
   }
 
