@@ -210,6 +210,20 @@ has since been deleted; it is not in the repo.
     defenders ahead), so the steer can never snap frame-to-frame. `p.steer` is
     reset each play.
 
+28. **Visible build version + the real collision-rumble fix** (2026-06-27):
+    - **Build badge / cache-busting** — a small version badge now shows in the
+      bottom-right corner (driven by `VERSION` in `main.js`). The same number is a
+      `?v=NN` cache-buster on every module import and the `<script>` tag, so a
+      normal reload always pulls the latest code and you can confirm a push went
+      live by checking the number. Bump process documented in `architecture.md`.
+    - **Collision "rumble" fixed (the real cause)** — when the lines met, each
+      blocker toggled between "approach" and "engage" every frame and *teleported*
+      its defender to the opposite shoulder; that feedback loop made the whole pile
+      vibrate (it was never really about the SPRINT button). Engagement is now
+      **sticky** (`o.locked`) and fully **eased** — the blocker rides the
+      defender's ball-side shoulder and drives the pair slowly back off the ball,
+      with no per-frame snapping. Carrier steer smoothing from #27 stays.
+
 ## Open / not yet done
 
 - Per-position coaching for the **rest of the offense** (currently the carrier

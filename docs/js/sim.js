@@ -8,8 +8,8 @@
 // nobody is ever "run through," and yards = how far the carrier actually got.
 // ===========================================================================
 
-import { buildFormation, holeX, PLAYER_R } from "./formations.js";
-import { assignmentFor, actionType } from "./plays.js";
+import { buildFormation, holeX, PLAYER_R } from "./formations.js?v=29";
+import { assignmentFor, actionType } from "./plays.js?v=29";
 
 const SPEED = { QB: 140, FB: 150, TB: 155, OL: 135, WR: 150, DL: 120, LB: 150, DB: 170 };
 
@@ -92,7 +92,7 @@ export class Sim {
 
     let id = 0;
     this.players = [...offense, ...defense];
-    this.players.forEach((p) => { p.id = id++; p.vx = 0; p.vy = 0; p.engaged = false; p.engagedBy = null; p.targetId = null; p.missed = false; p.steer = 0; });
+    this.players.forEach((p) => { p.id = id++; p.vx = 0; p.vy = 0; p.engaged = false; p.engagedBy = null; p.targetId = null; p.missed = false; p.steer = 0; p.locked = false; });
     this.offense = offense; this.defense = defense;
 
     this.gapX = holeX(offense, play.hole, side);
@@ -304,20 +304,31 @@ export class Sim {
       // blockers
       const tgt = o.targetId != null ? this.byId(o.targetId) : null;
       if (tgt) {
-        // aim to be BETWEEN the defender and the ball
+        // Stay BETWEEN the defender and the ball. (ux,uy) is the unit vector from
+        // the defender toward the ball; the blocker rides that (ball) side and the
+        // defender is pinned on the far side.
         const bx = handoff ? ballX : this.gapX, by = handoff ? ballY : this.losY - 6;
-        const ang = Math.atan2(by - tgt.y, bx - tgt.x);
-        const spot = { x: tgt.x + Math.cos(ang) * (o.r + tgt.r - 2), y: tgt.y + Math.sin(ang) * (o.r + tgt.r - 2) };
-        if (dist(o.x, o.y, tgt.x, tgt.y) > o.r + tgt.r + 3) {
-          this.moveToward(o, spot.x, spot.y, st);
+        const dxb = bx - tgt.x, dyb = by - tgt.y, db = Math.hypot(dxb, dyb) || 1;
+        const ux = dxb / db, uy = dyb / db;
+        const reach = o.r + tgt.r - 1;
+        if (!o.locked && dist(o.x, o.y, tgt.x, tgt.y) > o.r + tgt.r + 3) {
+          // Not yet engaged: close to the defender's ball-side shoulder.
+          this.moveToward(o, tgt.x + ux * reach, tgt.y + uy * reach, st);
         } else {
-          // engaged: hold position in front of the man and drive him back, off the ball
+          // Engaged: lock on and hold the block. Once locked we STAY locked and
+          // ease into position (no distance-threshold toggling, no teleporting the
+          // defender to the far side) - that feedback loop was the "rumble" when
+          // the lines met. The pair is then driven slowly back off the ball.
+          o.locked = true;
           tgt.engaged = true; tgt.engagedBy = o.id;
-          const away = Math.atan2(tgt.y - by, tgt.x - bx);
-          const push = o.speed * st * 0.28;
-          o.x += Math.cos(ang) * push * -0.4; o.y += Math.sin(ang) * push * -0.4;
-          tgt.x = o.x + Math.cos(away) * (o.r + tgt.r - 1);
-          tgt.y = o.y + Math.sin(away) * (o.r + tgt.r - 1);
+          const k = Math.min(1, st * 10);
+          o.x += (tgt.x + ux * reach - o.x) * k;
+          o.y += (tgt.y + uy * reach - o.y) * k;
+          tgt.x = o.x - ux * reach;
+          tgt.y = o.y - uy * reach;
+          const drive = o.speed * st * 0.14; // win a little ground each frame
+          o.x -= ux * drive; o.y -= uy * drive;
+          tgt.x -= ux * drive; tgt.y -= uy * drive;
         }
       } else if (o.action === "FAKE") {
         // sell the fake: sprint toward the fake gap, away from the real ball

@@ -69,6 +69,24 @@ Driven by `Game` in `game.js`, one play at a time inside a 6-play "drive":
   correct hole + target HUT).
 - **Speed button:** 🐢 Slow / ▶ Normal / ⚡ Fast multiplies the time scale on top.
 
+## Versioning / cache-busting (bump on every deploy)
+
+There's a visible build badge in the bottom-right corner of the app so you can
+confirm a push actually went live. It's driven by `VERSION` in `js/main.js`, and
+the **same number** is used as a `?v=NN` query on every module import + the
+`<script>` tag, which forces the browser to refetch the latest code on a normal
+reload.
+
+**Every deploy, bump the number in all of these (keep them identical):**
+
+- `js/main.js` — the `VERSION` string **and** `import ... "./game.js?v=NN"`.
+- `js/game.js` — the four `?v=NN` imports (sim, plays, storage, audio).
+- `js/sim.js` — the two `?v=NN` imports (formations, plays).
+- `index.html` — `<script ... src="js/main.js?v=NN">`.
+
+Fastest way: find-and-replace the old `?v=NN` token with the new one across those
+files, then update the `VERSION` display string in `main.js` to match.
+
 ## Gotchas for future edits
 
 - `game.js` is a single object literal — **methods are comma-separated.** Forgetting
