@@ -24,20 +24,46 @@ export class Sim {
     this.steer = 0;
     this.burst = false;
     this.onEnd = null;
+    this.gaps = null;
+    this.selGapIdx = 0;
     this.loop = this.loop.bind(this);
+
+    // Keep the drawing buffer matched to the on-screen size at all times so
+    // players always render as true circles. The field's display height changes
+    // as the control rows toggle (read choices -> gap select -> snap -> steer);
+    // without this the fixed-resolution bitmap gets stretched into ellipses.
+    if (typeof ResizeObserver !== "undefined") {
+      this.ro = new ResizeObserver(() => { if (this.W) { this.measure(); this.render(); } });
+      this.ro.observe(canvas);
+    }
   }
 
   // ---- layout ----
+  // Re-measures the canvas to its current display size. If players already
+  // exist (mid-play resize), every position is rescaled proportionally so the
+  // play stays visually consistent while the circles stay perfectly round.
   measure() {
     const rect = this.canvas.getBoundingClientRect();
     const dpr = Math.max(1, window.devicePixelRatio || 1);
-    this.W = Math.max(280, Math.round(rect.width));
-    this.H = Math.max(300, Math.round(rect.height));
-    this.canvas.width = Math.round(this.W * dpr);
-    this.canvas.height = Math.round(this.H * dpr);
+    const newW = Math.max(280, Math.round(rect.width));
+    const newH = Math.max(300, Math.round(rect.height));
+    const oldW = this.W, oldH = this.H;
+    this.W = newW; this.H = newH;
+    this.canvas.width = Math.round(newW * dpr);
+    this.canvas.height = Math.round(newH * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.losY = Math.round(this.H * 0.6);
     this.pxPerYard = this.losY / 30;
+
+    if (oldW && oldH && (oldW !== newW || oldH !== newH) && this.players) {
+      const sx = newW / oldW, sy = newH / oldH;
+      for (const p of this.players) { p.x *= sx; p.y *= sy; p.hx *= sx; p.hy *= sy; }
+      if (this.gaps) for (const g of this.gaps) g.x *= sx;
+      if (this.gapX != null) this.gapX *= sx;
+      if (this.meshX != null) this.meshX *= sx;
+      if (this.meshY != null) this.meshY *= sy;
+      if (this.cx != null) this.cx *= sx;
+    }
   }
 
   byId(id) { return this.players.find((p) => p.id === id); }
@@ -82,6 +108,7 @@ export class Sim {
     this.t = 0;
     this.phase = "pre";
     this.result = null;
+    this.gaps = null;
     this.render();
   }
 
@@ -110,8 +137,38 @@ export class Sim {
       .forEach((o) => take(o, nearest(o.hx, o.hy, box)));
   }
 
+  // ---- pre-snap gap selection (ball carrier picks the hole) ----
+  // Builds the six numbered holes left-to-right and lets the player slide a lane
+  // selector to the gap they intend to attack, just like the original demo.
+  enterGapSelect(showCorrect) {
+    const holes = [1, 2, 3, 4, 5, 6];
+    this.gaps = holes
+      .map((h) => ({ hole: h, x: holeX(this.offense, h, this.side) }))
+      .sort((a, b) => a.x - b.x);
+    this.showCorrectGap = !!showCorrect;
+    // Start the selector on the middle-ish gap so the player has to move it.
+    this.selGapIdx = Math.floor(this.gaps.length / 2);
+    this.gapX = this.gaps[this.selGapIdx].x;
+    this.phase = "gapselect";
+    this.render();
+  }
+  moveGap(dir) {
+    if (this.phase !== "gapselect" || !this.gaps) return;
+    this.selGapIdx = Math.max(0, Math.min(this.gaps.length - 1, this.selGapIdx + dir));
+    this.gapX = this.gaps[this.selGapIdx].x;
+    this.render();
+  }
+  selectedHole() { return this.gaps ? this.gaps[this.selGapIdx].hole : null; }
+  // Lock in the chosen gap as the live running lane and clear the selector UI.
+  lockGap() {
+    if (this.gaps) this.gapX = this.gaps[this.selGapIdx].x;
+    this.gaps = null;
+    this.phase = "pre";
+    this.render();
+  }
+
   // ---- live control ----
-  begin() { this.phase = "live"; this.t = 0; this.last = 0; if (!this.running) { this.running = true; requestAnimationFrame(this.loop); } }
+  begin() { this.gaps = null; this.phase = "live"; this.t = 0; this.last = 0; if (!this.running) { this.running = true; requestAnimationFrame(this.loop); } }
   setSteer(d) { this.steer = d; }
   setBurst(b) { this.burst = b; }
   setTimeScale(s) { this.timeScale = s; }
@@ -255,14 +312,38 @@ export class Sim {
     for (let y = this.losY % band; y < H; y += band) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
     // line of scrimmage + running lane
     if (this.gapX != null && this.phase !== "over") {
-      ctx.fillStyle = "rgba(255,210,63,.16)";
+      ctx.fillStyle = this.phase === "gapselect" ? "rgba(255,210,63,.28)" : "rgba(255,210,63,.16)";
       ctx.fillRect(this.gapX - 13, 0, 26, this.losY + 30);
     }
     ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, this.losY); ctx.lineTo(W, this.losY); ctx.stroke();
 
+    if (this.phase === "gapselect") this.drawGaps();
+
     for (const p of this.players) this.drawPlayer(p);
     // ball marker on the carrier
     if (this.carrier) { const c = this.carrier; ctx.fillStyle = "#7a3b12"; ctx.beginPath(); ctx.ellipse(c.x, c.y, 6, 4, 0, 0, 7); ctx.fill(); }
+  }
+
+  // Numbered hole markers shown while the carrier picks his gap. The selected
+  // hole pulses gold; in Teach mode the correct hole is tinted green.
+  drawGaps() {
+    const ctx = this.ctx;
+    const y = this.losY - 30;
+    const correctHole = this.play ? this.play.hole : null;
+    ctx.font = "bold 13px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    this.gaps.forEach((g, i) => {
+      const sel = i === this.selGapIdx;
+      const correct = this.showCorrectGap && g.hole === correctHole;
+      const rad = sel ? 13 : 10;
+      ctx.beginPath(); ctx.arc(g.x, y, rad, 0, 7);
+      ctx.fillStyle = sel ? "#ffd23f" : (correct ? "#27d17c" : "rgba(0,0,0,.45)");
+      ctx.fill();
+      ctx.lineWidth = sel ? 2 : 1;
+      ctx.strokeStyle = sel ? "#fff" : (correct ? "#aef5cf" : "rgba(255,255,255,.5)");
+      ctx.stroke();
+      ctx.fillStyle = (sel || correct) ? "#111" : "#fff";
+      ctx.fillText(String(g.hole), g.x, y);
+    });
   }
 
   drawPlayer(p) {

@@ -106,6 +106,11 @@ export const Game = {
     $("speedBtn").onclick = () => this.cycleSpeed();
     this.updateSpeedBtn();
 
+    // gap selection (ball carrier)
+    $("gapL").onclick = () => { if ($("gapRow").classList.contains("active")) { SFX.tap(); this.sim.moveGap(-1); } };
+    $("gapR").onclick = () => { if ($("gapRow").classList.contains("active")) { SFX.tap(); this.sim.moveGap(1); } };
+    $("gapReady").onclick = () => this.gapReady();
+
     // steering
     const press = (el, dir) => {
       const on = (e) => { e.preventDefault(); this.sim.setSteer(dir); };
@@ -127,10 +132,16 @@ export const Game = {
     // keyboard
     window.addEventListener("keydown", (e) => {
       if (!$("play").classList.contains("active")) return;
-      if (e.code === "ArrowLeft") this.sim.setSteer(-1);
-      else if (e.code === "ArrowRight") this.sim.setSteer(1);
-      else if (e.code === "ArrowUp") this.sim.setBurst(true);
-      else if (e.code === "Space") { e.preventDefault(); if ($("snapRow").classList.contains("active")) this.onSnap(); else this.sim.setBurst(true); }
+      const gap = $("gapRow").classList.contains("active");
+      if (e.code === "ArrowLeft") { if (gap) { SFX.tap(); this.sim.moveGap(-1); } else this.sim.setSteer(-1); }
+      else if (e.code === "ArrowRight") { if (gap) { SFX.tap(); this.sim.moveGap(1); } else this.sim.setSteer(1); }
+      else if (e.code === "ArrowUp") { if (!gap) this.sim.setBurst(true); }
+      else if (e.code === "Space" || e.code === "Enter") {
+        e.preventDefault();
+        if (gap) this.gapReady();
+        else if ($("snapRow").classList.contains("active")) this.onSnap();
+        else this.sim.setBurst(true);
+      }
     });
     window.addEventListener("keyup", (e) => {
       if (e.code === "ArrowLeft" || e.code === "ArrowRight") this.sim.setSteer(0);
@@ -157,15 +168,20 @@ export const Game = {
     this.clearTimers();
     const play = this.order[this.idx];
     const side = Math.random() < 0.5 ? "R" : "L";
+    this.snapCount = 1 + Math.floor(Math.random() * 3); // play is "ON 1/2/3"
     this.cur = { play, side };
     this.playerCorrect = true;
     this.applyTimeScale();
     this.sim.setup(play, side, this.label, true, LEVEL_FACTOR[this.level]);
 
+    $("gapRow").classList.remove("active");
+    $("snapRow").classList.remove("active");
+    $("steerRow").classList.remove("active");
+
     $("pYards").textContent = this.driveYards;
     $("pPlay").textContent = (this.idx + 1) + "/" + this.order.length;
     $("pStreak").textContent = this.streak + "\uD83D\uDD25";
-    const callTxt = "I " + (side === "R" ? "RIGHT" : "LEFT") + " \u00b7 " + play.call;
+    const callTxt = "I " + (side === "R" ? "RIGHT" : "LEFT") + " \u00b7 " + play.call + " \u00b7 ON " + this.snapCount;
     $("pCall").textContent = callTxt;
     const myAssign = assignmentFor(play, this.label, side);
     $("pTask").textContent = "You are " + this.label + ". What is your job?";
@@ -202,36 +218,92 @@ export const Game = {
     } else { SFX.big(); }
     box.querySelectorAll("button").forEach((b) => (b.disabled = true));
 
-    // re-setup the sim with the real consequence of the read, then go to cadence
+    // re-setup the sim with the real consequence of the read, then continue.
     this.sim.setup(this.cur.play, this.cur.side, this.label, right, LEVEL_FACTOR[this.level]);
     this.applyTimeScale();
-    this.timer(right ? 650 : 1100, () => { box.classList.remove("active"); box.dataset.done = ""; this.startCadence(); });
+    this.timer(right ? 650 : 1100, () => {
+      box.classList.remove("active"); box.dataset.done = "";
+      // The ball carrier picks his gap before the snap; everyone else snaps right away.
+      if (this.sim.isPlayerCarrier) this.startGapSelect(); else this.startCadence();
+    });
+  },
+
+  // ---------- gap select ----------
+  startGapSelect() {
+    this.sim.enterGapSelect(this.level === 1);
+    $("gapRow").classList.add("active");
+    $("snapRow").classList.remove("active");
+    $("steerRow").classList.remove("active");
+    $("pHint").textContent = "Pick your hole \u2014 \u25c0 \u25b6 then READY";
+    const hole = this.cur.play.hole;
+    $("pTask").textContent = this.level === 1
+      ? "Run the " + hole + " hole \u2014 slide to the green number."
+      : "Which hole does " + this.cur.play.num + " hit? Slide there.";
+  },
+
+  gapReady() {
+    if (!$("gapRow").classList.contains("active")) return;
+    const picked = this.sim.selectedHole();
+    if (picked !== this.cur.play.hole) {
+      SFX.bad();
+      $("pHint").textContent = this.level === 3
+        ? "Wrong gap \u2014 check the play number and try again."
+        : "That's the " + picked + " hole. " + this.cur.play.num + " hits the " + this.cur.play.hole + " hole.";
+      return;
+    }
+    SFX.tap();
+    this.sim.lockGap();
+    $("gapRow").classList.remove("active");
+    this.startCadence();
   },
 
   // ---------- cadence ----------
+  // The call was "ON <snapCount>". Cadence runs DOWN, SET, HUT 1, HUT 2, ...
+  // and the player must snap exactly on "HUT <snapCount>". Early = false start,
+  // late = the play breaks down.
   startCadence() {
     $("snapRow").classList.add("active");
-    $("pHint").textContent = "Snap on \u201cHUT\u201d! (tap SNAP or press Space)";
-    this.snapped = false; this.hutTime = null;
-    const d = this.level === 3 ? 430 : 620;
-    const flash = (w, tgt) => { const cw = $("cadWord"); cw.textContent = w; cw.classList.toggle("tgt", !!tgt); cw.style.opacity = "1"; this.timer(440, () => (cw.style.opacity = "0")); };
-    this.timer(120, () => { flash("DOWN"); SFX.snap(); });
-    this.timer(120 + d, () => { flash("SET"); SFX.snap(); });
-    this.timer(120 + 2 * d, () => { flash("HUT!", true); this.hutTime = performance.now(); SFX.hut(); });
-    this.timer(120 + 2 * d + 1700, () => { if (!this.snapped) this.onSnap(); });
+    $("pHint").textContent = "Snap on \u201cHUT " + this.snapCount + "\u201d! (tap SNAP or Space)";
+    $("pTask").textContent = "Listen for the count \u2014 the ball is snapped ON " + this.snapCount + ".";
+    this.snapped = false;
+
+    const beats = ["DOWN", "SET"];
+    for (let i = 1; i <= this.snapCount; i++) beats.push("HUT " + i);
+    this.targetBeat = beats.length - 1; // the final HUT is the snap beat
+    this.beatIdx = -1;
+    const d = this.level === 3 ? 480 : 720;
+    const hint = this.level === 1;
+
+    const step = () => {
+      this.beatIdx++;
+      if (this.beatIdx >= beats.length) {
+        if (!this.snapped) this.failCadence("late"); // ran past the count
+        return;
+      }
+      const w = beats[this.beatIdx];
+      const isTarget = this.beatIdx === this.targetBeat;
+      const cw = $("cadWord");
+      cw.textContent = w; cw.classList.toggle("tgt", isTarget && hint); cw.style.opacity = "1";
+      this.timer(d * 0.6, () => { if (!this.snapped) cw.style.opacity = "0"; });
+      if (w.indexOf("HUT") === 0) SFX.hut(); else SFX.snap();
+      this.timer(d, step);
+    };
+    step();
   },
 
   onSnap() {
     if (this.snapped || !$("snapRow").classList.contains("active")) return;
     this.snapped = true;
+    const beat = this.beatIdx;
     this.clearTimers();
-    $("snapRow").classList.remove("active");
     $("cadWord").style.opacity = "0";
+
+    if (beat < this.targetBeat) { this.failCadence("early"); return; }
+    if (beat > this.targetBeat) { this.failCadence("late"); return; }
+
+    this.timing = "perfect"; // snapped on the right count
+    $("snapRow").classList.remove("active");
     SFX.snap();
-
-    if (this.hutTime == null) { this.timing = "early"; }
-    else { const dl = performance.now() - this.hutTime; this.timing = dl < 650 ? "perfect" : "good"; }
-
     if (this.sim.isPlayerCarrier) {
       $("steerRow").classList.add("active");
       $("pHint").textContent = "Steer through the hole \u2014 \u25c0 \u25b6 or swipe, GO to burst!";
@@ -240,6 +312,25 @@ export const Game = {
     }
     this.applyTimeScale();
     this.sim.begin();
+  },
+
+  // A blown snap count ends the play before it starts.
+  failCadence(type) {
+    this.snapped = true;
+    this.clearTimers();
+    $("snapRow").classList.remove("active");
+    $("cadWord").style.opacity = "0";
+    SFX.bad();
+    this.streak = 0;
+    $("pStreak").textContent = this.streak + "\uD83D\uDD25";
+    const early = type === "early";
+    this.popCombo(early ? "FALSE START! \uD83D\uDEA9" : "TOO LATE! \uD83D\uDEA9", "#ff7b7b");
+    $("pTask").textContent = early
+      ? "\uD83D\uDEA9 Too early \u2014 false start. Wait for \u201cHUT " + this.snapCount + "\u201d."
+      : "\uD83D\uDEA9 Too late \u2014 the play broke down. Snap right on \u201cHUT " + this.snapCount + "\u201d.";
+    $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));
+    this.idx++;
+    this.timer(1500, () => { if (this.idx >= this.order.length) this.showResults(); else this.nextPlay(); });
   },
 
   // ---------- result of one play ----------
