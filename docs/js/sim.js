@@ -8,8 +8,8 @@
 // nobody is ever "run through," and yards = how far the carrier actually got.
 // ===========================================================================
 
-import { buildFormation, holeX, PLAYER_R } from "./formations.js?v=31";
-import { assignmentFor, actionType } from "./plays.js?v=31";
+import { buildFormation, holeX, PLAYER_R } from "./formations.js?v=32";
+import { assignmentFor, actionType } from "./plays.js?v=32";
 
 const SPEED = { QB: 140, FB: 150, TB: 155, OL: 135, WR: 150, DL: 120, LB: 150, DB: 170 };
 
@@ -45,7 +45,17 @@ export class Sim {
     // as the control rows toggle (read choices -> gap select -> snap -> steer);
     // without this the fixed-resolution bitmap gets stretched into ellipses.
     if (typeof ResizeObserver !== "undefined") {
-      this.ro = new ResizeObserver(() => { if (this.W) { this.measure(); this.render(); } });
+      this.ro = new ResizeObserver(() => {
+        if (!this.W) return;
+        // Do NOT re-measure/rescale DURING a play. If a scrollbar flickers or the
+        // layout reflows mid-play, the canvas would resize and every player's
+        // coordinates would be rescaled back and forth each frame - a field-wide
+        // "rumble" that no physics/render smoothing can hide (it moves the drawn
+        // positions directly). The field size doesn't legitimately change within a
+        // play, so we only re-measure between plays.
+        if (this.phase === "live" || this.phase === "replay") return;
+        this.measure(); this.render();
+      });
       this.ro.observe(canvas);
     }
   }

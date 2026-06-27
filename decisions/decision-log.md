@@ -264,6 +264,17 @@ has since been deleted; it is not in the repo.
     - **NOTE on caching:** if the corner badge doesn't read the latest build after a
       reload, that's the stale-cache issue the badge exists to reveal \u2014 hard-refresh.
 
+31. **Rumble: freeze the field during a play** (2026-06-27, build v32): render
+    smoothing (#30) didn't kill it, which pointed away from per-frame physics
+    jitter and toward the **canvas resize/rescale loop**. The play screen scrolls
+    (`overflow-y:auto`) with a wrappable HUD, so a scrollbar can toggle mid-play;
+    that resizes `#field`, and the `ResizeObserver` then rescales *every* player's
+    coords back and forth each frame (a field-wide rumble nothing at the
+    physics/render layer can hide). Fix: the `ResizeObserver` now **ignores resizes
+    while `phase` is `live`/`replay`** and only re-measures between plays (the field
+    size never legitimately changes mid-play). If this still shows a rumble, first
+    confirm the corner badge reads the latest build (stale cache).
+
 ## Open / not yet done
 
 - Per-position coaching for the **rest of the offense** (currently the carrier

@@ -1,7 +1,7 @@
-import { Sim } from "./sim.js?v=31";
-import { PLAYS, assignmentFor } from "./plays.js?v=31";
-import { Storage } from "./storage.js?v=31";
-import { SFX } from "./audio.js?v=31";
+import { Sim } from "./sim.js?v=32";
+import { PLAYS, assignmentFor } from "./plays.js?v=32";
+import { Storage } from "./storage.js?v=32";
+import { SFX } from "./audio.js?v=32";
 
 const $ = (id) => document.getElementById(id);
 
