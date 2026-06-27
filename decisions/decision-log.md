@@ -167,6 +167,27 @@ has since been deleted; it is not in the repo.
       between-plays bar re-runs it over ~3.4s so the user can watch how everyone
       moved without it flying by.
 
+25. **Sprint, teaching, touchdown & speed-order fixes** (2026-06-27):
+    - **SPRINT now responds instantly** — holding SPRINT used to do nothing for
+      ~1–2s because the back didn't have the ball yet (it was still meeting the QB
+      at the mesh). Now holding SPRINT also speeds the back (and the QB closing to
+      him) to the mesh, so the handoff happens sooner and the burst kicks in right
+      away. Proximity-handoff gate lowered (`t > 0.12` → `0.05`).
+    - **No more run jitter ("glitch")** — the ball carrier only steers around a
+      free defender who is actually *ahead* of him and close (≤80px); defenders
+      level with or behind him are ignored. This stops the left-right wobble that
+      the SPRINT boost used to amplify.
+    - **Break-aways are touchdowns** — if the carrier runs off the top of the
+      field with nobody able to catch him, it's now a **TOUCHDOWN** (he takes it
+      all the way), not a "29-yard first down". The old "BROKE = big gain" outcome
+      is gone.
+    - **Teach explains "I LEFT / I RIGHT"** — the Level 1 breakdown now opens by
+      explaining that the call's LEFT/RIGHT tells the tight end (Y) which side to
+      line up on (the strong side).
+    - **Speed cycle re-ordered** — the speed button now cycles **Normal → Slow →
+      Fast** (was Normal → Fast → Slower) and defaults to Normal. "Slower" renamed
+      to "Slow".
+
 ## Open / not yet done
 
 - Per-position coaching for the **rest of the offense** (currently the carrier

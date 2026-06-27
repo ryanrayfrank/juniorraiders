@@ -280,10 +280,15 @@ export class Sim {
     // Hand off as soon as the QB reaches the back (no dead wait at the mesh),
     // with the timer as a fallback so it always happens.
     const met = this.qb && dist(this.qb.x, this.qb.y, this.carrier.x, this.carrier.y) < (this.qb.r + this.carrier.r + 5);
-    const handoff = this.t >= this.ball.handoffAt || (this.t > 0.12 && met);
+    const handoff = this.t >= this.ball.handoffAt || (this.t > 0.05 && met);
     if (handoff && this.ball.carrierId !== this.carrier.id) this.ball.carrierId = this.carrier.id;
 
     const ballX = this.carrier.x, ballY = this.carrier.y;
+
+    // Holding SPRINT (player carrier) also closes the mesh faster, so the back
+    // takes the handoff sooner and the burst feels immediate instead of waiting
+    // a beat or two for the handoff to finish.
+    const meshBoost = (this.isPlayerCarrier && this.burst) ? 1.5 : 1;
 
     // --- offense ---
     for (const o of this.offense) {
@@ -291,10 +296,10 @@ export class Sim {
       if (o.label === "QB") {
         // mesh then boot fake away from the play
         if (handoff) this.moveToward(o, this.cx + (this.gapX < this.cx ? 40 : -40), this.losY + 46, st, 0.7);
-        else this.moveToward(o, this.meshX, this.meshY, st, 0.8);
+        else this.moveToward(o, this.meshX, this.meshY, st, 0.8 * meshBoost);
         continue;
       }
-      if (o === this.carrier && !handoff) { this.moveToward(o, this.meshX, this.meshY - 4, st, 0.7); continue; }
+      if (o === this.carrier && !handoff) { this.moveToward(o, this.meshX, this.meshY - 4, st, 0.7 * meshBoost); continue; }
 
       // blockers
       const tgt = o.targetId != null ? this.byId(o.targetId) : null;
@@ -360,8 +365,9 @@ export class Sim {
       const goalY = this.losY - this.toGoal * this.pxPerYard;
       // Crossed the end-zone goal line (only when the goal is close enough to see).
       if (this.toGoal <= 30 && this.carrier.y <= goalY + 2) return this.endPlay("TD", null);
-      // Broke completely free and ran off the top of the field (open field, big gain).
-      if (this.carrier.y <= this.carrier.r + 3) return this.endPlay("BROKE", null);
+      // Broke completely free and ran off the top of the field with nobody able to
+      // catch him - in the open field that's a TOUCHDOWN (he runs it all the way).
+      if (this.carrier.y <= this.carrier.r + 3) return this.endPlay("TD", null);
       for (const d of this.defense) {
         if (d.engaged) continue;
         if (dist(d.x, d.y, this.carrier.x, this.carrier.y) <= d.r + this.carrier.r + 1) return this.endPlay(false, d);
@@ -379,9 +385,18 @@ export class Sim {
     let tx, ty;
     if (c.y > this.losY - 6) { tx = this.gapX; ty = this.losY - 14; }
     else {
+      // Climb to daylight: only steer around a free defender who is actually
+      // AHEAD of the back and close. Ignoring defenders behind/beside him keeps
+      // the run smooth (no left-right jitter as he passes them, which the SPRINT
+      // boost used to amplify).
       let nd = null, bd = Infinity;
-      for (const d of this.defense) { if (d.engaged) continue; const dd = dist(d.x, d.y, c.x, c.y); if (dd < bd) { bd = dd; nd = d; } }
-      const dodge = nd ? (c.x < nd.x ? -1 : 1) * 26 : 0;
+      for (const d of this.defense) {
+        if (d.engaged) continue;
+        if (d.y > c.y - c.r) continue; // skip anyone level with or behind the back
+        const dd = dist(d.x, d.y, c.x, c.y);
+        if (dd < bd) { bd = dd; nd = d; }
+      }
+      const dodge = (nd && bd < 80) ? (c.x < nd.x ? -1 : 1) * 22 : 0;
       tx = Math.max(c.r, Math.min(this.W - c.r, c.x + dodge)); ty = 0;
     }
     this.moveToward(c, tx, ty, st, (this.botch ? 0.7 : 1) * boost);

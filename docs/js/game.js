@@ -34,10 +34,11 @@ const DEF_CHIPS = [
 ];
 
 const LEVEL_FACTOR = { 1: 0.5, 2: 0.7, 3: 1.0 };
-// "Normal" is the old "Slow" pace; "Slower" is an even gentler setting for new players.
+// Cycle order is Normal -> Slow -> Fast (the default is Normal). "Slow" is the
+// gentlest pace for new players; "Fast" is full speed.
 const SPEED_STATES = [
-  { id: "slower", label: "&#128034; Slower", mult: 0.4 },
   { id: "normal", label: "&#9654; Normal", mult: 0.6 },
+  { id: "slow", label: "&#128034; Slow", mult: 0.4 },
   { id: "fast", label: "&#9889; Fast", mult: 1.0 },
 ];
 
@@ -48,7 +49,7 @@ export const Game = {
     this.sim.onReplayEnd = () => { $("pHint").textContent = "Read what happened, then tap NEXT (or press Space)."; };
     this.label = null;
     this.level = 2;
-    this.speedIdx = 1;
+    this.speedIdx = 0; // default to Normal (first in SPEED_STATES)
     this.timers = [];
     this.buildPickers();
     this.bindUI();
@@ -263,12 +264,19 @@ export const Game = {
   // A simple, kid-friendly breakdown of the whole play for Teach (Level 1).
   teachBreakdown(play, myAssign) {
     const hole = play.hole;
+    const sideName = this.cur.side === "R" ? "RIGHT" : "LEFT";
+    // Explain what "I LEFT / I RIGHT" means: it tells the tight end (Y) which
+    // side to line up on (the strong side).
+    const teTip = "\u201cI " + sideName + "\u201d means the tight end (Y) lines up on the " + sideName + " side \u2014 that's the strong side. ";
+    let core;
     if (this.label === play.carrier) {
-      if (play.type === "DIVE") return play.num + " DIVE: you're the " + this.label + ". Take the quick handoff and hit the " + hole + " hole FAST and low.";
-      if (play.type === "LEAD") return play.num + " LEAD: you're the " + this.label + ". Your fullback blocks ahead \u2014 follow right behind him through the " + hole + " hole.";
-      return play.num + " POWER: you're the " + this.label + ". Follow the pulling guard around through the " + hole + " hole.";
+      if (play.type === "DIVE") core = play.num + " DIVE: you're the " + this.label + ". Take the quick handoff and hit the " + hole + " hole FAST and low.";
+      else if (play.type === "LEAD") core = play.num + " LEAD: you're the " + this.label + ". Your fullback blocks ahead \u2014 follow right behind him through the " + hole + " hole.";
+      else core = play.num + " POWER: you're the " + this.label + ". Follow the pulling guard around through the " + hole + " hole.";
+    } else {
+      core = play.num + ": you're the " + this.label + ". Your job is to " + myAssign.toLowerCase() + ". The ball goes through the " + hole + " hole.";
     }
-    return play.num + ": you're the " + this.label + ". Your job is to " + myAssign.toLowerCase() + ". The ball goes through the " + hole + " hole.";
+    return teTip + core;
   },
 
   gapReady() {
@@ -327,7 +335,7 @@ export const Game = {
     // Slower, clearer cadence - especially in Teach so a beginner can follow it.
     // It also tracks the game-speed setting so a slower game has a slower count.
     const base = this.level === 1 ? 1300 : (this.level === 2 ? 1000 : 800);
-    const speedFactor = 0.6 / SPEED_STATES[this.speedIdx].mult; // Normal=1, Slower=1.5, Fast=0.6
+    const speedFactor = 0.6 / SPEED_STATES[this.speedIdx].mult; // Normal=1, Slow=1.5, Fast=0.6
     const d = Math.round(base * speedFactor);
     const hint = this.level === 1;
 
