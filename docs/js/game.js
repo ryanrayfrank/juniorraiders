@@ -1,5 +1,5 @@
 import { Sim } from "./sim.js";
-import { PLAYS, choicesFor, assignmentFor, groupOf } from "./plays.js";
+import { PLAYS, assignmentFor } from "./plays.js";
 import { Storage } from "./storage.js";
 import { SFX } from "./audio.js";
 
@@ -184,48 +184,13 @@ export const Game = {
     const callTxt = "I " + (side === "R" ? "RIGHT" : "LEFT") + " \u00b7 " + play.call + " \u00b7 ON " + this.snapCount;
     $("pCall").textContent = callTxt;
     const myAssign = assignmentFor(play, this.label, side);
-    $("pTask").textContent = "You are " + this.label + ". What is your job?";
+    $("readChoices").classList.remove("active");
+    $("pTask").textContent = "You are " + this.label + " \u2014 " + myAssign + ".";
     $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));
 
-    this.doReadStep(play, side, myAssign);
-  },
-
-  doReadStep(play, side, myAssign) {
-    $("snapRow").classList.remove("active");
-    $("steerRow").classList.remove("active");
-    $("pHint").textContent = "Pick the right assignment for your position.";
-    const box = $("readChoices"); box.innerHTML = ""; box.classList.add("active");
-    const { correct, options } = choicesFor(play, this.label, side);
-    this.curCorrect = correct;
-    options.forEach((opt) => {
-      const b = document.createElement("button");
-      b.className = "choice"; b.textContent = opt;
-      if (this.level === 1 && opt === correct) b.classList.add("hint"); // Teach: show the answer
-      b.onclick = () => this.onReadChoice(b, opt, correct);
-      box.appendChild(b);
-    });
-  },
-
-  onReadChoice(btn, opt, correct) {
-    const box = $("readChoices");
-    if (box.dataset.done) return; box.dataset.done = "1";
-    const right = opt === correct;
-    this.playerCorrect = right;
-    btn.classList.add(right ? "right" : "wrong");
-    if (!right) {
-      [...box.children].forEach((c) => { if (c.textContent === correct) c.classList.add("right"); });
-      SFX.bad(); this.streak = 0;
-    } else { SFX.big(); }
-    box.querySelectorAll("button").forEach((b) => (b.disabled = true));
-
-    // re-setup the sim with the real consequence of the read, then continue.
-    this.sim.setup(this.cur.play, this.cur.side, this.label, right, LEVEL_FACTOR[this.level]);
-    this.applyTimeScale();
-    this.timer(right ? 650 : 1100, () => {
-      box.classList.remove("active"); box.dataset.done = "";
-      // The ball carrier picks his gap before the snap; everyone else snaps right away.
-      if (this.sim.isPlayerCarrier) this.startGapSelect(); else this.startCadence();
-    });
+    // Straight into the play: the ball carrier picks his gap, everyone else
+    // goes right to the cadence. (No multiple-choice read step.)
+    if (this.sim.isPlayerCarrier) this.startGapSelect(); else this.startCadence();
   },
 
   // ---------- gap select ----------
@@ -246,6 +211,8 @@ export const Game = {
     const picked = this.sim.selectedHole();
     if (picked !== this.cur.play.hole) {
       SFX.bad();
+      this.playerCorrect = false; // missed the gap at least once -> counts against READS
+      this.streak = 0; $("pStreak").textContent = this.streak + "\uD83D\uDD25";
       $("pHint").textContent = this.level === 3
         ? "Wrong gap \u2014 check the play number and try again."
         : "That's the " + picked + " hole. " + this.cur.play.num + " hits the " + this.cur.play.hole + " hole.";
