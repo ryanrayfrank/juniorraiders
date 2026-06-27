@@ -8,8 +8,8 @@
 // nobody is ever "run through," and yards = how far the carrier actually got.
 // ===========================================================================
 
-import { buildFormation, holeX, PLAYER_R } from "./formations.js?v=30";
-import { assignmentFor, actionType } from "./plays.js?v=30";
+import { buildFormation, holeX, PLAYER_R } from "./formations.js?v=31";
+import { assignmentFor, actionType } from "./plays.js?v=31";
 
 const SPEED = { QB: 140, FB: 150, TB: 155, OL: 135, WR: 150, DL: 120, LB: 150, DB: 170 };
 
@@ -69,7 +69,7 @@ export class Sim {
 
     if (oldW && oldH && (oldW !== newW || oldH !== newH) && this.players) {
       const sx = newW / oldW, sy = newH / oldH;
-      for (const p of this.players) { p.x *= sx; p.y *= sy; p.hx *= sx; p.hy *= sy; }
+      for (const p of this.players) { p.x *= sx; p.y *= sy; p.hx *= sx; p.hy *= sy; if (p.dx != null) { p.dx *= sx; p.dy *= sy; } }
       if (this.gaps) for (const g of this.gaps) g.x *= sx;
       if (this.gapX != null) this.gapX *= sx;
       if (this.meshX != null) this.meshX *= sx;
@@ -92,7 +92,7 @@ export class Sim {
 
     let id = 0;
     this.players = [...offense, ...defense];
-    this.players.forEach((p) => { p.id = id++; p.vx = 0; p.vy = 0; p.engaged = false; p.engagedBy = null; p.targetId = null; p.missed = false; p.steer = 0; p.locked = false; });
+    this.players.forEach((p) => { p.id = id++; p.vx = 0; p.vy = 0; p.engaged = false; p.engagedBy = null; p.targetId = null; p.missed = false; p.steer = 0; p.locked = false; p.dx = p.x; p.dy = p.y; });
     this.offense = offense; this.defense = defense;
 
     this.gapX = holeX(offense, play.hole, side);
@@ -262,11 +262,27 @@ export class Sim {
     if (!this.last) this.last = ts;
     const dt = Math.min(0.05, (ts - this.last) / 1000);
     this.last = ts;
-    if (this.phase === "live") this.update(dt);
-    else if (this.phase === "replay") this.stepReplay(dt);
+    if (this.phase === "live") { this.update(dt); this.smoothDisplay(dt); }
+    else if (this.phase === "replay") { this.stepReplay(dt); this.syncDisplay(); }
     this.render();
     requestAnimationFrame(this.loop);
   }
+
+  // Render-layer low-pass: players are DRAWN at an eased position (dx,dy) that
+  // chases their true physics position (x,y). This filters out high-frequency
+  // jitter from collisions/pile-ups (and any sub-pixel resize rescale) so the
+  // motion always looks smooth on screen, regardless of the underlying cause,
+  // while the simulation/scoring still use the exact physics positions.
+  smoothDisplay(dt) {
+    const a = Math.min(1, dt * 18);
+    for (const p of this.players) {
+      if (p.dx == null) { p.dx = p.x; p.dy = p.y; continue; }
+      p.dx += (p.x - p.dx) * a;
+      p.dy += (p.y - p.dy) * a;
+    }
+  }
+  // During replay we want exact recorded positions (no extra easing/lag).
+  syncDisplay() { for (const p of this.players) { p.dx = p.x; p.dy = p.y; } }
 
   moveToward(p, tx, ty, st, slow) {
     const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy) || 1;
@@ -474,7 +490,7 @@ export class Sim {
     for (const p of this.players) this.drawPlayer(p);
     // football floats above whoever holds it (QB pre-snap, then the ball carrier)
     const holder = (this.ball && this.byId(this.ball.carrierId)) || this.carrier;
-    if (holder) this.drawBall(holder.x, holder.y - holder.r - 8);
+    if (holder) { const hx = holder.dx != null ? holder.dx : holder.x, hy = holder.dy != null ? holder.dy : holder.y; this.drawBall(hx, hy - holder.r - 8); }
     // gap numbers last so they always sit on top and stay readable
     if (this.phase === "gapselect") this.drawGaps();
   }
@@ -550,9 +566,10 @@ export class Sim {
 
   drawPlayer(p) {
     const ctx = this.ctx;
+    const x = p.dx != null ? p.dx : p.x, y = p.dy != null ? p.dy : p.y;
     const isCarrier = this.carrier && p.id === this.carrier.id;
     const isYou = p.label === this.playerLabel && p.team === "OFF";
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7);
+    ctx.beginPath(); ctx.arc(x, y, p.r, 0, 7);
     if (isCarrier) ctx.fillStyle = "#ffd23f";
     else if (p.team === "OFF") ctx.fillStyle = "#9a241d";
     else ctx.fillStyle = "#15466f";
@@ -560,9 +577,9 @@ export class Sim {
     ctx.lineWidth = isYou ? 3 : 2;
     ctx.strokeStyle = isYou ? "#ffd23f" : (p.team === "OFF" ? "#000" : "#06192b");
     ctx.stroke();
-    if (isYou && !isCarrier) { ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 4, 0, 7); ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 2; ctx.stroke(); }
+    if (isYou && !isCarrier) { ctx.beginPath(); ctx.arc(x, y, p.r + 4, 0, 7); ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 2; ctx.stroke(); }
     ctx.fillStyle = isCarrier ? "#111" : "#fff";
     ctx.font = "bold 10px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(p.label, p.x, p.y);
+    ctx.fillText(p.label, x, y);
   }
 }

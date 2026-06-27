@@ -20,6 +20,9 @@ body{ font-family:"Arial Black","Segoe UI",system-ui,sans-serif;
 /* ---------- HOME ---------- */
 .homeWrap{flex:1; display:flex; flex-direction:column; justify-content:center;}
 .logo{text-align:center; margin:4px 0 2px;}
+.logo .raiderLogo{width:160px; max-width:55%; height:auto; display:block; margin:0 auto 6px;
+  filter:drop-shadow(0 6px 16px rgba(0,0,0,.55));}
+.logo .forRaiders{font-size:13px; color:var(--gold); letter-spacing:1.5px; margin-bottom:10px; font-weight:700; text-transform:uppercase;}
 .logo .blitz{font-size:46px; line-height:.95; letter-spacing:1px; color:var(--ink); text-shadow:0 3px 0 var(--red-deep),0 6px 14px rgba(226,35,26,.4);}
 .logo .blitz b{color:var(--red);}
 .logo .sub{font-size:12px; color:var(--gray); letter-spacing:3px; margin-top:6px;}

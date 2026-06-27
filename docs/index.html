@@ -13,7 +13,12 @@
   <!-- HOME -->
   <section id="home" class="screen active">
     <div class="homeWrap">
-      <div class="logo"><div class="blitz">PLAYBOOK <b>BLITZ</b></div><div class="sub">LEARN YOUR POSITION</div></div>
+      <div class="logo">
+        <img class="raiderLogo" src="assets/raider-logo-noback.png" alt="Junior Raiders logo" />
+        <div class="forRaiders">For our Junior Raiders</div>
+        <div class="blitz">PLAYBOOK <b>BLITZ</b></div>
+        <div class="sub">LEARN YOUR POSITION</div>
+      </div>
       <div class="menu"><button class="btn gold hugeStart" id="startBtn">&#127944; LET'S GO</button></div>
     </div>
     <div class="tiny">A practice game for your playbook.<br>&#128421;&#65039; Arrow keys + Spacebar &nbsp;&bull;&nbsp; &#128241; Tap &amp; swipe<br>Best drive: <b id="bestHole">0</b> yards</div>
@@ -64,11 +69,12 @@
       <button class="pad" id="gapR">&#9654;</button>
     </div>
 
-    <!-- cadence -->
+    <!-- legacy snap row (no longer used: the QB now auto-hikes on the count) -->
     <div class="ctrlRow" id="snapRow"><button class="pad snap" id="snapBtn">&#127944; SNAP!</button></div>
 
-    <!-- live: hold to sprint through the hole (ball carrier only; no steering) -->
-    <div class="ctrlRow" id="sprintRow"><button class="pad go" id="sprintBtn">&#128168; HOLD TO SPRINT</button></div>
+    <!-- cadence + live: the QB auto-hikes on the count; this button is the player's
+         job. Early = offsides; on the hike = a good jump (and a burst for the carrier). -->
+    <div class="ctrlRow" id="sprintRow"><button class="pad go" id="sprintBtn">&#128168; SPRINT</button></div>
 
     <!-- between plays: re-watch the play, or continue -->
     <div class="ctrlRow" id="nextRow">
@@ -90,6 +96,6 @@
   </section>
 </div>
 
-<script type="module" src="js/main.js?v=30"></script>
+<script type="module" src="js/main.js?v=31"></script>
 </body>
 </html>

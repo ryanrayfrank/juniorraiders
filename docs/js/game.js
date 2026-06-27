@@ -1,7 +1,7 @@
-import { Sim } from "./sim.js?v=30";
-import { PLAYS, assignmentFor } from "./plays.js?v=30";
-import { Storage } from "./storage.js?v=30";
-import { SFX } from "./audio.js?v=30";
+import { Sim } from "./sim.js?v=31";
+import { PLAYS, assignmentFor } from "./plays.js?v=31";
+import { Storage } from "./storage.js?v=31";
+import { SFX } from "./audio.js?v=31";
 
 const $ = (id) => document.getElementById(id);
 
@@ -106,7 +106,6 @@ export const Game = {
     $("startPlayBtn").onclick = () => { if (this.label) this.startDrive(); };
     $("resAgain").onclick = () => this.startDrive();
     $("resHome").onclick = () => { this.refreshHome(); this.show("home"); };
-    $("snapBtn").onclick = () => this.onSnap();
     $("speedBtn").onclick = () => this.cycleSpeed();
     this.updateSpeedBtn();
 
@@ -119,24 +118,25 @@ export const Game = {
     $("nextBtn").onclick = () => this.advancePlay();
     $("replayBtn").onclick = () => this.watchReplay();
 
-    // SPRINT: hold to give the ball carrier a speed burst (no steering).
-    // Capture the pointer so holding keeps working even if the finger/mouse
-    // drifts off the small button mid-run.
+    // SPRINT/GO: the one live button. Pressing before the hike = offsides; on the
+    // hike = a good jump (and a burst for the carrier). Capture the pointer so a
+    // held sprint keeps working even if the finger/mouse drifts off the button.
     const sb = $("sprintBtn");
     sb.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       try { sb.setPointerCapture(e.pointerId); } catch (_) {}
-      this.sim.setBurst(true);
+      this.onSprintDown();
     });
-    const stopBurst = () => this.sim.setBurst(false);
-    sb.addEventListener("pointerup", stopBurst);
-    sb.addEventListener("pointercancel", stopBurst);
-    sb.addEventListener("lostpointercapture", stopBurst);
+    const sprintUp = () => this.onSprintUp();
+    sb.addEventListener("pointerup", sprintUp);
+    sb.addEventListener("pointercancel", sprintUp);
+    sb.addEventListener("lostpointercapture", sprintUp);
 
     // keyboard: arrows move the gap selector; Space/Enter confirms the active step;
-    // during the live run, holding Space sprints.
+    // during the cadence/run it is the SPRINT/GO button.
     window.addEventListener("keydown", (e) => {
       if (!$("play").classList.contains("active")) return;
+      if (e.repeat) return;
       const gap = $("gapRow").classList.contains("active");
       if (e.code === "ArrowLeft") { if (gap) { SFX.tap(); this.sim.moveGap(-1); } }
       else if (e.code === "ArrowRight") { if (gap) { SFX.tap(); this.sim.moveGap(1); } }
@@ -144,11 +144,10 @@ export const Game = {
         e.preventDefault();
         if (gap) this.gapReady();
         else if ($("nextRow").classList.contains("active")) this.advancePlay();
-        else if ($("snapRow").classList.contains("active")) this.onSnap();
-        else if ($("sprintRow").classList.contains("active")) this.sim.setBurst(true);
+        else if ($("sprintRow").classList.contains("active")) this.onSprintDown();
       }
     });
-    window.addEventListener("keyup", (e) => { if (e.code === "Space" || e.code === "Enter") this.sim.setBurst(false); });
+    window.addEventListener("keyup", (e) => { if (e.code === "Space" || e.code === "Enter") this.onSprintUp(); });
     window.addEventListener("resize", () => { if (this.sim.phase === "pre") this.sim.measure(); });
   },
 
@@ -330,16 +329,29 @@ export const Game = {
   },
 
   // ---------- cadence ----------
-  // The call was "ON <snapCount>". Cadence runs DOWN, SET, HUT 1, HUT 2, ...
-  // and the player must snap exactly on "HUT <snapCount>". Early = false start,
-  // late = the play breaks down.
+  // The call is "ON <snapCount>". The cadence runs DOWN, SET, HUT 1, HUT 2, ...
+  // and the QB auto-hikes the ball on "HUT <snapCount>" - the play ALWAYS runs.
+  // The SPRINT button is the player's job: hit it BEFORE the hike = offsides
+  // (false start); right on the hike = a great jump (and a burst for the carrier);
+  // well after = a late start.
   startCadence() {
-    $("snapRow").classList.add("active");
-    $("pHint").textContent = "Snap on \u201cHUT " + this.snapCount + "\u201d! (tap SNAP or Space)";
-    $("pTask").textContent = this.level === 1
-      ? "Almost! Wait for \u201cHUT " + this.snapCount + ",\u201d then tap SNAP to start the play."
-      : "Listen for the count \u2014 the ball is snapped ON " + this.snapCount + ".";
     this.snapped = false;
+    this.playLive = false;
+    this.sprintHeld = false;
+    this.timing = "none";
+    this.sprintStartMs = null;
+    this.snapAtMs = null;
+    this.sim.setBurst(false);
+
+    const carrier = this.sim.isPlayerCarrier;
+    const goWord = carrier ? "SPRINT" : "GO";
+    $("sprintBtn").innerHTML = carrier ? "\uD83D\uDCA8 SPRINT" : "\uD83D\uDCA5 GO!";
+    $("sprintRow").classList.add("active");
+    $("snapRow").classList.remove("active");
+    $("pHint").textContent = "Wait for the hike on \u201cHUT " + this.snapCount + "\u201d \u2014 don't go early!";
+    $("pTask").textContent = this.level === 1
+      ? "Listen to the count. The ball is hiked on \u201cHUT " + this.snapCount + "\u201d \u2014 tap " + goWord + " right then, not before (early = offsides)."
+      : "The ball is hiked on \u201cHUT " + this.snapCount + ".\u201d Tap " + goWord + " on the hike \u2014 going early is offsides.";
 
     const beats = ["DOWN", "SET"];
     for (let i = 1; i <= this.snapCount; i++) beats.push("HUT " + i);
@@ -354,52 +366,72 @@ export const Game = {
 
     const step = () => {
       this.beatIdx++;
-      if (this.beatIdx >= beats.length) {
-        if (!this.snapped) this.failCadence("late"); // ran past the count
-        return;
-      }
+      if (this.beatIdx >= beats.length) return;
       const w = beats[this.beatIdx];
-      const isTarget = this.beatIdx === this.targetBeat;
+      const isSnap = this.beatIdx === this.targetBeat;
       const cw = $("cadWord");
-      cw.textContent = w; cw.classList.toggle("tgt", isTarget && hint); cw.style.opacity = "1";
-      this.timer(d * 0.6, () => { if (!this.snapped) cw.style.opacity = "0"; });
+      cw.textContent = w; cw.classList.toggle("tgt", isSnap && hint); cw.style.opacity = "1";
       if (w.indexOf("HUT") === 0) SFX.hut(); else SFX.snap();
-      this.timer(d, step);
+      if (isSnap) {
+        this.hikeBall(); // auto-snap: the play begins right on the snap count
+      } else {
+        this.timer(d * 0.6, () => { cw.style.opacity = "0"; });
+        this.timer(d, step);
+      }
     };
     step();
   },
 
-  onSnap() {
-    if (this.snapped || !$("snapRow").classList.contains("active")) return;
+  // The QB hikes the ball automatically on the snap count and the play begins,
+  // no matter what the user does.
+  hikeBall() {
+    if (this.snapped) return;
     this.snapped = true;
-    const beat = this.beatIdx;
-    this.clearTimers();
-    $("cadWord").style.opacity = "0";
-
-    if (beat < this.targetBeat) { this.failCadence("early"); return; }
-    if (beat > this.targetBeat) { this.failCadence("late"); return; }
-
-    this.timing = "perfect"; // snapped on the right count
-    $("snapRow").classList.remove("active");
+    this.playLive = true;
+    this.snapAtMs = performance.now();
+    const cw = $("cadWord");
+    cw.textContent = "HIKE!"; cw.style.opacity = "1";
+    this.timer(450, () => { cw.style.opacity = "0"; });
     SFX.snap();
-    if (this.sim.isPlayerCarrier) {
-      $("sprintRow").classList.add("active");
-      $("pHint").textContent = "You've got the ball! Hold SPRINT to burst through your hole for more yards.";
-    } else if (this.sim.isFaker) {
-      $("pHint").textContent = "Watch yourself fake the other way and pull the defense \u2014 it frees the runner!";
-    } else {
-      $("pHint").textContent = "Watch the ball \u2014 your block springs the runner!";
-    }
+    $("pHint").textContent = this.sim.isPlayerCarrier
+      ? "GO! Hold SPRINT through your hole!"
+      : (this.sim.isFaker ? "Carry out your fake \u2014 pull the defense away!" : "Watch the ball \u2014 your block springs the runner!");
     this.applyTimeScale();
     this.sim.begin();
+    // If they were already holding the instant the ball was hiked, that's a great jump.
+    if (this.sprintHeld) { this.registerSprintTiming(); if (this.sim.isPlayerCarrier) this.sim.setBurst(true); }
   },
 
-  // A blown snap count is a 5-yard penalty. In real football a penalty replays
-  // the down (it doesn't use one up), but it pushes you 5 yards farther back.
-  failCadence(type) {
+  // Player pressed SPRINT/GO. Before the hike = offsides; otherwise it times the
+  // jump and (for the carrier) starts the speed burst.
+  onSprintDown() {
+    if (!$("sprintRow").classList.contains("active")) return;
+    this.sprintHeld = true;
+    if (!this.snapped) { this.offsides(); return; } // jumped before the hike
+    this.registerSprintTiming();
+    if (this.sim.isPlayerCarrier) this.sim.setBurst(true);
+  },
+  onSprintUp() {
+    this.sprintHeld = false;
+    this.sim.setBurst(false);
+  },
+  // Score how well the jump was timed relative to the hike (first press only).
+  registerSprintTiming() {
+    if (this.sprintStartMs != null) return;
+    this.sprintStartMs = performance.now();
+    const dt = this.sprintStartMs - (this.snapAtMs || this.sprintStartMs);
+    this.timing = dt <= 450 ? "perfect" : (dt <= 1100 ? "good" : "late");
+  },
+
+  // Going before the hike is OFFSIDES (a false start): the play is blown dead,
+  // it's a 5-yard penalty, and the down is replayed.
+  offsides() {
+    if (this.playLive) return; // can't be offsides once the ball is hiked
     this.snapped = true;
+    this.sprintHeld = false;
+    this.sim.setBurst(false);
     this.clearTimers();
-    $("snapRow").classList.remove("active");
+    $("sprintRow").classList.remove("active");
     $("cadWord").style.opacity = "0";
     SFX.bad();
     this.streak = 0;
@@ -407,12 +439,9 @@ export const Game = {
     const back = Math.min(5, this.ballOn - 1);
     this.ballOn -= back; this.toGo += back; // penalty from the spot; same line to gain
     this.updateHUD();
-    const early = type === "early";
-    this.popCombo(early ? "FALSE START! \uD83D\uDEA9" : "DELAY! \uD83D\uDEA9", "#ff7b7b");
-    $("pTask").textContent = (early
-      ? "\uD83D\uDEA9 You moved too early \u2014 that's a FALSE START."
-      : "\uD83D\uDEA9 You waited too long \u2014 that's DELAY OF GAME.")
-      + " A penalty moves you back 5 yards and you redo the down. Snap right on \u201cHUT " + this.snapCount + "\u201d.";
+    this.popCombo("OFFSIDES! \uD83D\uDEA9", "#ff7b7b");
+    $("pTask").textContent = "\uD83D\uDEA9 You went BEFORE the hike \u2014 that's OFFSIDES (a false start)."
+      + " The play is blown dead, you lose 5 yards, and you redo the down. Wait for \u201cHUT " + this.snapCount + ",\u201d then go.";
     $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));
     this.endPlayPause();
   },
@@ -423,7 +452,7 @@ export const Game = {
 
     let score = 0;
     if (this.playerCorrect) { score += 10; this.correctCount++; this.streak++; this.bestStreak = Math.max(this.bestStreak, this.streak); }
-    if (this.timing === "perfect") score += 5; else if (this.timing === "good") score += 2; else score -= 2;
+    if (this.timing === "perfect") score += 5; else if (this.timing === "good") score += 2; // a late/no jump just earns no bonus
     score += Math.max(0, r.yards);
     if (r.td) score += 20;
     this.xpGain += Math.max(0, score);
@@ -448,6 +477,11 @@ export const Game = {
         + " hits the " + this.cur.play.hole + " hole \u2014 that's why the defense was waiting."
         + " Run the " + this.cur.play.hole + " hole next time.";
     }
+    // How was the jump timed off the hike?
+    const goWord = this.sim.isPlayerCarrier ? "SPRINT" : "GO";
+    if (this.timing === "perfect") task += " \u23F1\uFE0F Perfect jump \u2014 you took off right on the hike!";
+    else if (this.timing === "good") task += " \u23F1\uFE0F Good jump off the hike.";
+    else if (this.sim.isPlayerCarrier) task += " \u23F1\uFE0F You started a beat late \u2014 tap " + goWord + " the instant the ball is hiked for more speed.";
     task += " " + this.rulesNote(outcome);
     $("pTask").textContent = task;
     $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));
@@ -489,6 +523,8 @@ export const Game = {
 
   // Pause after a play so the coaching stays on screen until the user taps NEXT.
   endPlayPause() {
+    this.sprintHeld = false;
+    this.playLive = false;
     this.sim.setBurst(false);
     $("gapRow").classList.remove("active");
     $("snapRow").classList.remove("active");

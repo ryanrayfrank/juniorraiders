@@ -240,6 +240,30 @@ has since been deleted; it is not in the repo.
       forms. (Sticky/eased blocking from #28 and carrier steer smoothing from #27
       stay.)
 
+30. **Junior Raiders logo, auto-hike SPRINT, render-smoothed motion** (2026-06-27, build v31):
+    - **Home-screen logo** — the transparent Raider logo
+      (`docs/assets/raider-logo-noback.png`) now sits atop the home screen with a
+      gold "For our Junior Raiders" tagline above PLAYBOOK BLITZ.
+    - **SNAP button is now SPRINT/GO + the QB auto-hikes** — there's no more manual
+      "tap SNAP to start." The cadence runs and the QB hikes the ball automatically
+      on "HUT N"; the play ALWAYS runs. The one bottom button (SPRINT for the
+      carrier, GO for others) is the player's timing job: pressing **before** the
+      hike = **OFFSIDES** (false start, 5 yards, redo the down); right on the hike =
+      a great jump (and the speed burst for the carrier); well after = a late start
+      (no bonus). Timing is scored perfect/good/late and explained in the coaching.
+      The old `onSnap`/`failCadence` (and the late-snap "delay of game") are gone;
+      replaced by `hikeBall`, `onSprintDown/Up`, `registerSprintTiming`, `offsides`.
+      The `#snapRow` element is kept but unused.
+    - **Rumble fixed at the render layer (new approach)** — after several physics
+      passes, we stopped chasing the cause and filtered the *symptom*: players are
+      now DRAWN at an eased position (`p.dx/dy`) that low-pass-chases their true
+      physics position, so any high-frequency jitter (collisions, pile-ups, even a
+      sub-pixel resize rescale) is smoothed out visually while the sim/scoring keep
+      using exact positions. Replay syncs display positions exactly. Earlier
+      physics fixes (#27/#28/#29) stay and make the underlying motion calmer too.
+    - **NOTE on caching:** if the corner badge doesn't read the latest build after a
+      reload, that's the stale-cache issue the badge exists to reveal \u2014 hard-refresh.
+
 ## Open / not yet done
 
 - Per-position coaching for the **rest of the offense** (currently the carrier
