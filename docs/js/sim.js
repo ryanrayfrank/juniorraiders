@@ -21,8 +21,6 @@ export class Sim {
     this.ctx = canvas.getContext("2d");
     this.running = false;
     this.timeScale = 1;
-    this.steer = 0;
-    this.burst = false;
     this.onEnd = null;
     this.gaps = null;
     this.selGapIdx = 0;
@@ -169,8 +167,6 @@ export class Sim {
 
   // ---- live control ----
   begin() { this.gaps = null; this.phase = "live"; this.t = 0; this.last = 0; if (!this.running) { this.running = true; requestAnimationFrame(this.loop); } }
-  setSteer(d) { this.steer = d; }
-  setBurst(b) { this.burst = b; }
   setTimeScale(s) { this.timeScale = s; }
 
   start() { if (!this.running) { this.running = true; this.last = 0; requestAnimationFrame(this.loop); } }
@@ -274,26 +270,17 @@ export class Sim {
 
   runCarrier(st) {
     const c = this.carrier;
-    const burst = this.burst ? 1.18 : 1;
-    if (this.isPlayerCarrier) {
-      // auto-run upfield; player steers left/right (with a gentle pull to the hole until past the line)
-      c.y -= c.speed * st * burst;
-      if (c.y > this.losY - 6 && Math.abs(this.gapX - c.x) > 4) {
-        c.x += Math.sign(this.gapX - c.x) * c.speed * st * 0.5;
-      }
-      c.x += this.steer * c.speed * st * 0.85;
-    } else {
-      // AI: hit the hole, then climb to daylight away from the nearest free defender
-      let tx, ty;
-      if (c.y > this.losY - 6) { tx = this.gapX; ty = this.losY - 14; }
-      else {
-        let nd = null, bd = Infinity;
-        for (const d of this.defense) { if (d.engaged) continue; const dd = dist(d.x, d.y, c.x, c.y); if (dd < bd) { bd = dd; nd = d; } }
-        const dodge = nd ? (c.x < nd.x ? -1 : 1) * 26 : 0;
-        tx = Math.max(c.r, Math.min(this.W - c.r, c.x + dodge)); ty = 0;
-      }
-      this.moveToward(c, tx, ty, st, this.botch ? 0.7 : 1);
+    // The user already chose the gap pre-snap, so the back runs it automatically:
+    // hit the chosen hole, then climb to daylight away from the nearest free defender.
+    let tx, ty;
+    if (c.y > this.losY - 6) { tx = this.gapX; ty = this.losY - 14; }
+    else {
+      let nd = null, bd = Infinity;
+      for (const d of this.defense) { if (d.engaged) continue; const dd = dist(d.x, d.y, c.x, c.y); if (dd < bd) { bd = dd; nd = d; } }
+      const dodge = nd ? (c.x < nd.x ? -1 : 1) * 26 : 0;
+      tx = Math.max(c.r, Math.min(this.W - c.r, c.x + dodge)); ty = 0;
     }
+    this.moveToward(c, tx, ty, st, this.botch ? 0.7 : 1);
     c.x = Math.max(c.r, Math.min(this.W - c.r, c.x));
   }
 

@@ -121,42 +121,18 @@ export const Game = {
     // advance to the next play (after reading the result)
     $("nextBtn").onclick = () => this.advancePlay();
 
-    // steering
-    const press = (el, dir) => {
-      const on = (e) => { e.preventDefault(); this.sim.setSteer(dir); };
-      const off = () => this.sim.setSteer(0);
-      el.addEventListener("pointerdown", on); el.addEventListener("pointerup", off); el.addEventListener("pointerleave", off); el.addEventListener("pointercancel", off);
-    };
-    press($("steerL"), -1); press($("steerR"), 1);
-    $("burstBtn").addEventListener("pointerdown", (e) => { e.preventDefault(); this.sim.setBurst(true); });
-    $("burstBtn").addEventListener("pointerup", () => this.sim.setBurst(false));
-    $("burstBtn").addEventListener("pointerleave", () => this.sim.setBurst(false));
-
-    // field swipe / drag to steer
-    const fw = $("fieldWrap");
-    fw.addEventListener("pointerdown", (e) => { if (!this.sim.isPlayerCarrier || this.sim.phase !== "live") return; const r = fw.getBoundingClientRect(); this._drag = e.clientX; this.sim.setSteer(e.clientX < r.left + r.width / 2 ? -1 : 1); });
-    fw.addEventListener("pointermove", (e) => { if (this._drag == null) return; const dx = e.clientX - this._drag; if (Math.abs(dx) > 6) this.sim.setSteer(dx < 0 ? -1 : 1); });
-    fw.addEventListener("pointerup", () => { this._drag = null; this.sim.setSteer(0); });
-    fw.addEventListener("pointerleave", () => { this._drag = null; this.sim.setSteer(0); });
-
-    // keyboard
+    // keyboard: arrows only move the gap selector; Space/Enter confirms the active step.
     window.addEventListener("keydown", (e) => {
       if (!$("play").classList.contains("active")) return;
       const gap = $("gapRow").classList.contains("active");
-      if (e.code === "ArrowLeft") { if (gap) { SFX.tap(); this.sim.moveGap(-1); } else this.sim.setSteer(-1); }
-      else if (e.code === "ArrowRight") { if (gap) { SFX.tap(); this.sim.moveGap(1); } else this.sim.setSteer(1); }
-      else if (e.code === "ArrowUp") { if (!gap) this.sim.setBurst(true); }
+      if (e.code === "ArrowLeft") { if (gap) { SFX.tap(); this.sim.moveGap(-1); } }
+      else if (e.code === "ArrowRight") { if (gap) { SFX.tap(); this.sim.moveGap(1); } }
       else if (e.code === "Space" || e.code === "Enter") {
         e.preventDefault();
         if (gap) this.gapReady();
         else if ($("nextRow").classList.contains("active")) this.advancePlay();
         else if ($("snapRow").classList.contains("active")) this.onSnap();
-        else this.sim.setBurst(true);
       }
-    });
-    window.addEventListener("keyup", (e) => {
-      if (e.code === "ArrowLeft" || e.code === "ArrowRight") this.sim.setSteer(0);
-      if (e.code === "ArrowUp" || e.code === "Space") this.sim.setBurst(false);
     });
     window.addEventListener("resize", () => { if (this.sim.phase === "pre") this.sim.measure(); });
   },
@@ -188,7 +164,6 @@ export const Game = {
 
     $("gapRow").classList.remove("active");
     $("snapRow").classList.remove("active");
-    $("steerRow").classList.remove("active");
     $("nextRow").classList.remove("active");
 
     $("pYards").textContent = this.driveYards;
@@ -213,7 +188,6 @@ export const Game = {
     this.sim.enterGapSelect(this.level === 1);
     $("gapRow").classList.add("active");
     $("snapRow").classList.remove("active");
-    $("steerRow").classList.remove("active");
     const hole = this.cur.play.hole;
     const youCarry = this.sim.isPlayerCarrier;
     if (this.level === 1) {
@@ -308,12 +282,9 @@ export const Game = {
     this.timing = "perfect"; // snapped on the right count
     $("snapRow").classList.remove("active");
     SFX.snap();
-    if (this.sim.isPlayerCarrier) {
-      $("steerRow").classList.add("active");
-      $("pHint").textContent = "You've got the ball! Steer \u25c0 \u25b6 through the hole \u2014 hold SPRINT to run faster.";
-    } else {
-      $("pHint").textContent = "Watch the ball \u2014 your block springs the runner!";
-    }
+    $("pHint").textContent = this.sim.isPlayerCarrier
+      ? "You've got the ball \u2014 watch yourself run the hole you picked!"
+      : "Watch the ball \u2014 your block springs the runner!";
     this.applyTimeScale();
     this.sim.begin();
   },
@@ -338,8 +309,6 @@ export const Game = {
 
   // ---------- result of one play ----------
   onPlayEnd(r) {
-    this.sim.setSteer(0); this.sim.setBurst(false);
-    $("steerRow").classList.remove("active");
     this.driveYards += r.yards;
     $("pYards").textContent = this.driveYards;
 
@@ -370,10 +339,8 @@ export const Game = {
 
   // Pause after a play so the coaching stays on screen until the user taps NEXT.
   endPlayPause() {
-    this.sim.setSteer(0); this.sim.setBurst(false);
     $("gapRow").classList.remove("active");
     $("snapRow").classList.remove("active");
-    $("steerRow").classList.remove("active");
     const last = (this.idx + 1) >= this.order.length;
     $("nextBtn").innerHTML = last ? "\u25b6 SEE RESULTS" : "\u25b6 NEXT PLAY";
     $("nextRow").classList.add("active");

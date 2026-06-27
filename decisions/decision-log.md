@@ -109,6 +109,12 @@ has since been deleted; it is not in the repo.
       (QB pre-snap, then the ball carrier) so the user can always follow it.
     - **Live SPRINT button** — the old unexplained "GO" is relabeled "SPRINT" and
       the live hint explains: steer ◀ ▶, hold SPRINT to run faster.
+21. **Removed live steering entirely** (2026-06-26) — supersedes the SPRINT/steer
+    work above. Since the user already picks the gap pre-snap, that's the decision;
+    the back now runs the chosen hole automatically (AI: hit the hole, then climb
+    to daylight). Removed the ◀ / SPRINT / ▶ row, swipe-to-steer, and arrow/burst
+    keyboard during the live play. Arrows now only move the gap selector. The
+    player just watches the result of their pre-snap read.
 
 ## Open / not yet done
 
