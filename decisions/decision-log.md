@@ -224,6 +224,22 @@ has since been deleted; it is not in the repo.
       defender's ball-side shoulder and drives the pair slowly back off the ball,
       with no per-frame snapping. Carrier steer smoothing from #27 stays.
 
+29. **Wrong gaps are runnable on L2/L3 + another rumble pass** (2026-06-27, build v30):
+    - **Read/Game let you run the wrong gap** — previously the gap step refused to
+      continue until you picked the correct hole. Now only **Teach (L1)** still
+      guides you; in **Read (L2)** and **Game (L3)** you can lock in any hole and
+      the back actually runs it (away from his blocking, so a bad read produces a
+      bad result). The post-play coaching now names **both** holes: "You ran the X
+      hole, but 35 hits the 5 hole … run the 5 hole next time." Same idea applies
+      to a poor fake. Still dings the READS stat.
+    - **Rumble, take 3** — the remaining vibration was the pack of *pursuing*
+      (unblocked) defenders: pursuit re-stacked them every frame and a single
+      separation pass left overlap that ping-ponged. Separation now runs multiple
+      passes per frame (converges/settles within the frame), and the tackle reach
+      is a touch larger so the play ends right at contact before a grinding pile
+      forms. (Sticky/eased blocking from #28 and carrier steer smoothing from #27
+      stay.)
+
 ## Open / not yet done
 
 - Per-position coaching for the **rest of the offense** (currently the carrier

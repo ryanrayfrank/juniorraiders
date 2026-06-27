@@ -1,7 +1,7 @@
-import { Sim } from "./sim.js?v=29";
-import { PLAYS, assignmentFor } from "./plays.js?v=29";
-import { Storage } from "./storage.js?v=29";
-import { SFX } from "./audio.js?v=29";
+import { Sim } from "./sim.js?v=30";
+import { PLAYS, assignmentFor } from "./plays.js?v=30";
+import { Storage } from "./storage.js?v=30";
+import { SFX } from "./audio.js?v=30";
 
 const $ = (id) => document.getElementById(id);
 
@@ -283,18 +283,27 @@ export const Game = {
     if (!$("gapRow").classList.contains("active")) return;
     const picked = this.sim.selectedHole();
     const realHole = this.cur.play.hole;
+    this.pickedHole = picked;
+    // Teach (L1) still guides the player to the right gap (it shows the green
+    // answer). Read (L2) and Game (L3) let them run whatever they pick and learn
+    // from the result.
+    const guide = this.level === 1;
 
     if (this.sim.isFaker) {
-      // A fake must go to the OTHER side of the ball (different odd/even parity).
-      const sameSide = (picked % 2) === (realHole % 2);
-      if (sameSide) {
-        SFX.bad();
+      // A good fake goes to the OTHER side of the ball (different odd/even parity).
+      const goodFake = (picked % 2) !== (realHole % 2);
+      if (!goodFake) {
         this.playerCorrect = false;
         this.streak = 0;
-        $("pHint").textContent = "Fake AWAY from the ball \u2014 pick a hole on the OTHER side of the center.";
-        return;
+        if (guide) {
+          SFX.bad();
+          $("pHint").textContent = "Fake AWAY from the ball \u2014 pick a hole on the OTHER side of the center.";
+          return;
+        }
+        SFX.bad();
+      } else {
+        SFX.tap();
       }
-      SFX.tap();
       this.sim.lockFakeFromSelection();
       $("gapRow").classList.remove("active");
       this.startCadence();
@@ -302,15 +311,19 @@ export const Game = {
     }
 
     if (picked !== realHole) {
-      SFX.bad();
-      this.playerCorrect = false; // missed the gap at least once -> counts against READS
+      this.playerCorrect = false; // wrong gap -> counts against READS and shows in the feedback
       this.streak = 0;
-      $("pHint").textContent = this.level === 3
-        ? "Wrong gap \u2014 check the play number and try again."
-        : "That's the " + picked + " hole. " + this.cur.play.num + " hits the " + realHole + " hole.";
-      return;
+      if (guide) {
+        SFX.bad();
+        $("pHint").textContent = "That's the " + picked + " hole. " + this.cur.play.num + " hits the " + realHole + " hole.";
+        return;
+      }
+      SFX.bad();
+    } else {
+      SFX.tap();
     }
-    SFX.tap();
+    // Run whatever hole the player chose. A wrong gap runs AWAY from the blocking,
+    // so the result will show why it was the wrong read.
     this.sim.lockGap();
     $("gapRow").classList.remove("active");
     this.startCadence();
@@ -430,7 +443,11 @@ export const Game = {
 
     // Explain WHAT happened (coaching) + the football RULE that just applied.
     let task = this.explainPlay(r);
-    if (!this.playerCorrect && !this.sim.isFaker) task += " (Remember: " + this.cur.play.num + " hits the " + this.cur.play.hole + " hole.)";
+    if (!this.playerCorrect && !this.sim.isFaker && this.pickedHole != null) {
+      task += " You ran the " + this.pickedHole + " hole, but " + this.cur.play.num
+        + " hits the " + this.cur.play.hole + " hole \u2014 that's why the defense was waiting."
+        + " Run the " + this.cur.play.hole + " hole next time.";
+    }
     task += " " + this.rulesNote(outcome);
     $("pTask").textContent = task;
     $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));

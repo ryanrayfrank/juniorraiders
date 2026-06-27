@@ -8,8 +8,8 @@
 // nobody is ever "run through," and yards = how far the carrier actually got.
 // ===========================================================================
 
-import { buildFormation, holeX, PLAYER_R } from "./formations.js?v=29";
-import { assignmentFor, actionType } from "./plays.js?v=29";
+import { buildFormation, holeX, PLAYER_R } from "./formations.js?v=30";
+import { assignmentFor, actionType } from "./plays.js?v=30";
 
 const SPEED = { QB: 140, FB: 150, TB: 155, OL: 135, WR: 150, DL: 120, LB: 150, DB: 170 };
 
@@ -358,11 +358,22 @@ export class Sim {
     }
 
     // --- keep defenders from stacking (no two circles share a spot) ---
-    for (let i = 0; i < this.defense.length; i++) for (let j = i + 1; j < this.defense.length; j++) {
-      const a = this.defense[i], b = this.defense[j];
-      if (a.engaged || b.engaged) continue;
-      const dx = b.x - a.x, dy = b.y - a.y, dd = Math.hypot(dx, dy) || 1, min = a.r + b.r;
-      if (dd < min) { const p = (min - dd) / 2, ux = dx / dd, uy = dy / dd; a.x -= ux * p; a.y -= uy * p; b.x += ux * p; b.y += uy * p; }
+    // Resolve overlaps over several passes PER FRAME so a crowded pile fully
+    // settles within the frame. With a single pass, pursuit re-stacks them every
+    // frame and the leftover overlap ping-pongs frame-to-frame -> the visible
+    // "rumble" when the lines collide. Converging each frame removes it.
+    for (let pass = 0; pass < 5; pass++) {
+      let moved = false;
+      for (let i = 0; i < this.defense.length; i++) for (let j = i + 1; j < this.defense.length; j++) {
+        const a = this.defense[i], b = this.defense[j];
+        if (a.engaged || b.engaged) continue;
+        const dx = b.x - a.x, dy = b.y - a.y, dd = Math.hypot(dx, dy) || 1, min = a.r + b.r;
+        if (dd < min) {
+          const p = (min - dd) / 2, ux = dx / dd, uy = dy / dd;
+          a.x -= ux * p; a.y -= uy * p; b.x += ux * p; b.y += uy * p; moved = true;
+        }
+      }
+      if (!moved) break; // pile is settled; no need for more passes
     }
 
     // clamp everyone in bounds
@@ -381,7 +392,10 @@ export class Sim {
       if (this.carrier.y <= this.carrier.r + 3) return this.endPlay("TD", null);
       for (const d of this.defense) {
         if (d.engaged) continue;
-        if (dist(d.x, d.y, this.carrier.x, this.carrier.y) <= d.r + this.carrier.r + 1) return this.endPlay(false, d);
+        // End the play as soon as a free defender gets to the carrier. A slightly
+        // larger reach stops the play right as contact happens, before a tight
+        // pile can form and grind/"rumble" around him.
+        if (dist(d.x, d.y, this.carrier.x, this.carrier.y) <= d.r + this.carrier.r + 4) return this.endPlay(false, d);
       }
     }
     if (this.t > 9) this.endPlay(false, null); // safety valve
