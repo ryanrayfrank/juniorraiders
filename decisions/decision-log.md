@@ -97,6 +97,19 @@ has since been deleted; it is not in the repo.
 
 ---
 
+20. **Flow & clarity fixes** (2026-06-26):
+    - **NEXT button between plays** — post-play coaching no longer auto-disappears;
+      the play pauses on the result until the user taps NEXT (or Space). Last play
+      shows "SEE RESULTS". Applies to blown-cadence plays too.
+    - **Huddle/gap pick on every play** — previously the gap selector only showed
+      when the user was the ball carrier, so it was skipped on ~half the plays.
+      Now every play asks for the hole (your hole if you carry it, otherwise where
+      the ball goes).
+    - **Football icon** — a small football now floats above whoever has the ball
+      (QB pre-snap, then the ball carrier) so the user can always follow it.
+    - **Live SPRINT button** — the old unexplained "GO" is relabeled "SPRINT" and
+      the live hint explains: steer ◀ ▶, hold SPRINT to run faster.
+
 ## Open / not yet done
 
 - Per-position coaching for the **rest of the offense** (currently the carrier

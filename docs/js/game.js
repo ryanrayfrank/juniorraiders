@@ -118,6 +118,9 @@ export const Game = {
     $("gapR").onclick = () => { if ($("gapRow").classList.contains("active")) { SFX.tap(); this.sim.moveGap(1); } };
     $("gapReady").onclick = () => this.gapReady();
 
+    // advance to the next play (after reading the result)
+    $("nextBtn").onclick = () => this.advancePlay();
+
     // steering
     const press = (el, dir) => {
       const on = (e) => { e.preventDefault(); this.sim.setSteer(dir); };
@@ -146,6 +149,7 @@ export const Game = {
       else if (e.code === "Space" || e.code === "Enter") {
         e.preventDefault();
         if (gap) this.gapReady();
+        else if ($("nextRow").classList.contains("active")) this.advancePlay();
         else if ($("snapRow").classList.contains("active")) this.onSnap();
         else this.sim.setBurst(true);
       }
@@ -185,6 +189,7 @@ export const Game = {
     $("gapRow").classList.remove("active");
     $("snapRow").classList.remove("active");
     $("steerRow").classList.remove("active");
+    $("nextRow").classList.remove("active");
 
     $("pYards").textContent = this.driveYards;
     $("pPlay").textContent = (this.idx + 1) + "/" + this.order.length;
@@ -198,9 +203,9 @@ export const Game = {
       : "You are " + this.label + " \u2014 " + myAssign + ".";
     $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));
 
-    // Straight into the play: the ball carrier picks his gap, everyone else
-    // goes right to the cadence. (No multiple-choice read step.)
-    if (this.sim.isPlayerCarrier) this.startGapSelect(); else this.startCadence();
+    // Every play starts with the huddle/gap pick: identify where the ball goes
+    // (your hole if you carry it, otherwise the hole the play hits).
+    this.startGapSelect();
   },
 
   // ---------- gap select ----------
@@ -210,12 +215,17 @@ export const Game = {
     $("snapRow").classList.remove("active");
     $("steerRow").classList.remove("active");
     const hole = this.cur.play.hole;
+    const youCarry = this.sim.isPlayerCarrier;
     if (this.level === 1) {
       // Teach: keep the full breakdown up top, put the simple action below.
-      $("pHint").textContent = "Slide \u25c0 \u25b6 to the green " + hole + ", then press READY.";
+      $("pHint").textContent = youCarry
+        ? "Slide \u25c0 \u25b6 to the green " + hole + " (YOUR hole), then READY."
+        : "Slide \u25c0 \u25b6 to the green " + hole + " (where the ball goes), then READY.";
     } else {
-      $("pHint").textContent = "Pick your hole \u2014 \u25c0 \u25b6 then READY";
-      $("pTask").textContent = "Which hole does " + this.cur.play.num + " hit? Slide there.";
+      $("pHint").textContent = "Pick the hole \u2014 \u25c0 \u25b6 then READY";
+      $("pTask").textContent = youCarry
+        ? "Which hole do YOU run on " + this.cur.play.num + "? Slide there."
+        : "Where does the ball go on " + this.cur.play.num + "? Pick that hole.";
     }
   },
 
@@ -300,9 +310,9 @@ export const Game = {
     SFX.snap();
     if (this.sim.isPlayerCarrier) {
       $("steerRow").classList.add("active");
-      $("pHint").textContent = "Steer through the hole \u2014 \u25c0 \u25b6 or swipe, GO to burst!";
+      $("pHint").textContent = "You've got the ball! Steer \u25c0 \u25b6 through the hole \u2014 hold SPRINT to run faster.";
     } else {
-      $("pHint").textContent = "Watch your block spring the runner!";
+      $("pHint").textContent = "Watch the ball \u2014 your block springs the runner!";
     }
     this.applyTimeScale();
     this.sim.begin();
@@ -323,8 +333,7 @@ export const Game = {
       ? "\uD83D\uDEA9 Too early \u2014 false start. Wait for \u201cHUT " + this.snapCount + "\u201d."
       : "\uD83D\uDEA9 Too late \u2014 the play broke down. Snap right on \u201cHUT " + this.snapCount + "\u201d.";
     $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));
-    this.idx++;
-    this.timer(1500, () => { if (this.idx >= this.order.length) this.showResults(); else this.nextPlay(); });
+    this.endPlayPause();
   },
 
   // ---------- result of one play ----------
@@ -356,9 +365,27 @@ export const Game = {
     $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));
     $("pStreak").textContent = this.streak + "\uD83D\uDD25";
 
+    this.endPlayPause();
+  },
+
+  // Pause after a play so the coaching stays on screen until the user taps NEXT.
+  endPlayPause() {
+    this.sim.setSteer(0); this.sim.setBurst(false);
+    $("gapRow").classList.remove("active");
+    $("snapRow").classList.remove("active");
+    $("steerRow").classList.remove("active");
+    const last = (this.idx + 1) >= this.order.length;
+    $("nextBtn").innerHTML = last ? "\u25b6 SEE RESULTS" : "\u25b6 NEXT PLAY";
+    $("nextRow").classList.add("active");
+    $("pHint").textContent = "Read what happened, then tap NEXT (or press Space).";
+  },
+
+  advancePlay() {
+    if (!$("nextRow").classList.contains("active")) return;
+    SFX.tap();
+    $("nextRow").classList.remove("active");
     this.idx++;
-    const delay = r.td ? 2800 : (this.level === 1 ? 3400 : 2300);
-    this.timer(delay, () => { if (this.idx >= this.order.length) this.showResults(); else this.nextPlay(); });
+    if (this.idx >= this.order.length) this.showResults(); else this.nextPlay();
   },
 
   // Turn the simulated result into a coaching sentence: what happened + a fix.

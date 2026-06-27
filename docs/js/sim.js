@@ -323,10 +323,24 @@ export class Sim {
     ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, this.losY); ctx.lineTo(W, this.losY); ctx.stroke();
 
     for (const p of this.players) this.drawPlayer(p);
-    // ball marker on the carrier
-    if (this.carrier) { const c = this.carrier; ctx.fillStyle = "#7a3b12"; ctx.beginPath(); ctx.ellipse(c.x, c.y, 6, 4, 0, 0, 7); ctx.fill(); }
+    // football floats above whoever holds it (QB pre-snap, then the ball carrier)
+    const holder = (this.ball && this.byId(this.ball.carrierId)) || this.carrier;
+    if (holder) this.drawBall(holder.x, holder.y - holder.r - 8);
     // gap numbers last so they always sit on top and stay readable
     if (this.phase === "gapselect") this.drawGaps();
+  }
+
+  // A small, recognizable football marker so the user can always see the ball.
+  drawBall(x, y) {
+    y = Math.max(9, y);
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = "#7a3b12"; ctx.strokeStyle = "#3f1d08"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(x, y, 9, 5.5, 0, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.4; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x - 4.5, y); ctx.lineTo(x + 4.5, y); ctx.stroke();
+    for (let i = -3; i <= 3; i += 2) { ctx.beginPath(); ctx.moveTo(x + i, y - 2); ctx.lineTo(x + i, y + 2); ctx.stroke(); }
+    ctx.restore();
   }
 
   // Numbered hole markers shown while the carrier picks his gap. The selected
