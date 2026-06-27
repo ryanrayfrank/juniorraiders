@@ -39,9 +39,9 @@
   <section id="play" class="screen">
     <div class="gbar">
       <button class="x" id="playHome">&#10005;</button>
-      <div class="stat"><b id="pYards">0</b><span>YARDS</span></div>
-      <div class="stat"><b id="pPlay">1/6</b><span>PLAY</span></div>
-      <div class="stat"><b id="pStreak">0&#128293;</b><span>STREAK</span></div>
+      <div class="stat wide"><b id="pDown">1st &amp; 10</b><span>DOWN</span></div>
+      <div class="stat"><b id="pBallOn">25</b><span>BALL ON</span></div>
+      <div class="stat"><b id="pScore">0</b><span>POINTS</span></div>
       <div class="gbarSpacer"></div>
       <button class="speedBtn" id="speedBtn">&#9654; Normal</button>
       <span class="chip" id="pChip">TB &middot; L1</span>
@@ -69,8 +69,11 @@
     <!-- live: hold to sprint through the hole (ball carrier only; no steering) -->
     <div class="ctrlRow" id="sprintRow"><button class="pad go" id="sprintBtn">&#128168; HOLD TO SPRINT</button></div>
 
-    <!-- between plays: read the result, then continue -->
-    <div class="ctrlRow" id="nextRow"><button class="pad go" id="nextBtn">&#9654; NEXT PLAY</button></div>
+    <!-- between plays: re-watch the play, or continue -->
+    <div class="ctrlRow" id="nextRow">
+      <button class="pad" id="replayBtn">&#128257; REPLAY</button>
+      <button class="pad go" id="nextBtn">&#9654; NEXT PLAY</button>
+    </div>
 
     <div class="swipeHint" id="pHint">&mdash;</div>
   </section>

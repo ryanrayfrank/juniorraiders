@@ -32,8 +32,12 @@ export class Sim {
     this.timeScale = 1;
     this.burst = false;
     this.onEnd = null;
+    this.onReplayEnd = null;
     this.gaps = null;
     this.selGapIdx = 0;
+    this.record = [];      // per-frame snapshots so a play can be re-watched
+    this.toGo = 10;        // yards to the first-down line (drawn on the field)
+    this.toGoal = 70;      // yards to the end zone (drawn when close enough)
     this.loop = this.loop.bind(this);
 
     // Keep the drawing buffer matched to the on-screen size at all times so
@@ -77,11 +81,14 @@ export class Sim {
   byId(id) { return this.players.find((p) => p.id === id); }
 
   // ---- build a play ----
-  setup(play, side, playerLabel, playerCorrect, levelFactor) {
+  setup(play, side, playerLabel, playerCorrect, levelFactor, toGo, toGoal) {
     this.measure();
     const { offense, defense, cx, SP } = buildFormation(this.W, this.H, this.losY, side);
     this.cx = cx; this.SP = SP; this.side = side; this.play = play;
     this.levelFactor = levelFactor;
+    this.toGo = (toGo != null) ? toGo : 10;       // distance to the first-down line
+    this.toGoal = (toGoal != null) ? toGoal : 70; // distance to the end zone
+    this.record = [];
 
     let id = 0;
     this.players = [...offense, ...defense];
@@ -215,12 +222,40 @@ export class Sim {
   }
 
   // ---- live control ----
-  begin() { this.gaps = null; this.phase = "live"; this.t = 0; this.last = 0; if (!this.running) { this.running = true; requestAnimationFrame(this.loop); } }
+  begin() { this.gaps = null; this.phase = "live"; this.t = 0; this.last = 0; this.record = []; if (!this.running) { this.running = true; requestAnimationFrame(this.loop); } }
   setBurst(b) { this.burst = b; }
   setTimeScale(s) { this.timeScale = s; }
 
   start() { if (!this.running) { this.running = true; this.last = 0; requestAnimationFrame(this.loop); } }
   stop() { this.running = false; }
+
+  // ---- replay: re-run the recorded frames so the user can watch it again ----
+  playReplay() {
+    if (!this.record || this.record.length < 2) return false;
+    this.replayPos = 0;
+    this.replayRate = this.record.length / 3.4; // play the whole thing back over ~3.4s
+    this.phase = "replay";
+    this.last = 0;
+    if (!this.running) { this.running = true; requestAnimationFrame(this.loop); }
+    return true;
+  }
+  applyFrame(idx) {
+    const f = this.record[idx];
+    if (!f) return;
+    for (let i = 0; i < this.players.length && i < f.p.length; i++) { this.players[i].x = f.p[i].x; this.players[i].y = f.p[i].y; }
+    if (f.c != null && this.ball) this.ball.carrierId = f.c;
+  }
+  stepReplay(dt) {
+    this.replayPos += dt * this.replayRate;
+    let idx = Math.floor(this.replayPos);
+    if (idx >= this.record.length - 1) {
+      this.applyFrame(this.record.length - 1);
+      this.phase = "over";
+      if (this.onReplayEnd) this.onReplayEnd();
+      return;
+    }
+    this.applyFrame(idx);
+  }
 
   loop(ts) {
     if (!this.running) return;
@@ -228,6 +263,7 @@ export class Sim {
     const dt = Math.min(0.05, (ts - this.last) / 1000);
     this.last = ts;
     if (this.phase === "live") this.update(dt);
+    else if (this.phase === "replay") this.stepReplay(dt);
     this.render();
     requestAnimationFrame(this.loop);
   }
@@ -316,9 +352,16 @@ export class Sim {
     // clamp everyone in bounds
     for (const p of this.players) { p.x = Math.max(p.r, Math.min(this.W - p.r, p.x)); p.y = Math.max(p.r, Math.min(this.H - p.r, p.y)); }
 
+    // record this frame so the play can be re-watched
+    this.record.push({ p: this.players.map((pl) => ({ x: pl.x, y: pl.y })), c: this.ball ? this.ball.carrierId : null });
+
     // --- tackle / score ---
     if (handoff) {
-      if (this.carrier.y <= 10) return this.endPlay(true);
+      const goalY = this.losY - this.toGoal * this.pxPerYard;
+      // Crossed the end-zone goal line (only when the goal is close enough to see).
+      if (this.toGoal <= 30 && this.carrier.y <= goalY + 2) return this.endPlay("TD", null);
+      // Broke completely free and ran off the top of the field (open field, big gain).
+      if (this.carrier.y <= this.carrier.r + 3) return this.endPlay("BROKE", null);
       for (const d of this.defense) {
         if (d.engaged) continue;
         if (dist(d.x, d.y, this.carrier.x, this.carrier.y) <= d.r + this.carrier.r + 1) return this.endPlay(false, d);
@@ -345,12 +388,17 @@ export class Sim {
     c.x = Math.max(c.r, Math.min(this.W - c.r, c.x));
   }
 
-  endPlay(td, tackler) {
+  // kind: "TD" (crossed the goal), "BROKE" (broke free for the canvas max), or
+  // false (tackled). The game converts these yards into down & distance.
+  endPlay(kind, tackler) {
     if (this.phase === "over") return;
     this.phase = "over";
+    const td = kind === "TD";
     let yards = Math.round((this.losY - this.carrier.y) / this.pxPerYard);
-    if (td) yards = Math.max(yards, Math.round(this.losY / this.pxPerYard));
-    this.result = { td, yards, tackler: tackler ? tackler.label : null, botch: this.botch, faker: this.isFaker, pulled: this.pulled };
+    if (td) yards = this.toGoal; // reached the end zone exactly
+    else if (kind === "BROKE") yards = Math.max(yards, Math.round(this.losY / this.pxPerYard));
+    yards = Math.max(yards, -9);
+    this.result = { td, broke: td || kind === "BROKE", yards, tackler: tackler ? tackler.label : null, botch: this.botch, faker: this.isFaker, pulled: this.pulled };
     if (this.onEnd) this.onEnd(this.result);
   }
 
@@ -370,12 +418,43 @@ export class Sim {
     }
     ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, this.losY); ctx.lineTo(W, this.losY); ctx.stroke();
 
+    this.drawFieldMarks();
+
     for (const p of this.players) this.drawPlayer(p);
     // football floats above whoever holds it (QB pre-snap, then the ball carrier)
     const holder = (this.ball && this.byId(this.ball.carrierId)) || this.carrier;
     if (holder) this.drawBall(holder.x, holder.y - holder.r - 8);
     // gap numbers last so they always sit on top and stay readable
     if (this.phase === "gapselect") this.drawGaps();
+  }
+
+  // The yellow first-down line (the "line to gain") and the end zone, so the
+  // user can SEE what they're running toward - the whole point of down & distance.
+  drawFieldMarks() {
+    const ctx = this.ctx, W = this.W;
+    // end zone + goal line (only drawn when it's within the visible field)
+    if (this.toGoal != null) {
+      const gY = this.losY - this.toGoal * this.pxPerYard;
+      if (gY >= -2 && gY < this.losY) {
+        ctx.fillStyle = "rgba(226,35,26,.30)"; ctx.fillRect(0, 0, W, Math.max(0, gY));
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, gY); ctx.lineTo(W, gY); ctx.stroke();
+        ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+        ctx.fillText("END ZONE", W / 2, 5);
+      }
+    }
+    // first-down line (dashed gold) - cross this to move the chains
+    if (this.toGo != null) {
+      const fdY = this.losY - this.toGo * this.pxPerYard;
+      const goalBeyond = this.toGoal != null && this.toGo >= this.toGoal;
+      if (!goalBeyond && fdY > 4 && fdY < this.losY - 1) {
+        ctx.save();
+        ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 3; ctx.setLineDash([11, 7]);
+        ctx.beginPath(); ctx.moveTo(0, fdY); ctx.lineTo(W, fdY); ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = "#ffd23f"; ctx.font = "bold 10px Arial"; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+        ctx.fillText("1ST DOWN", 6, fdY - 2);
+      }
+    }
   }
 
   // A small, recognizable football marker so the user can always see the ball.

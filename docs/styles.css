@@ -43,6 +43,8 @@ body{ font-family:"Arial Black","Segoe UI",system-ui,sans-serif;
 .gbarTitle{flex:1; text-align:center; font-size:18px;}
 .gbarSpacer{flex:1;}
 .stat{background:var(--blk3); border:2px solid #333; border-radius:10px; padding:6px 10px; text-align:center; min-width:54px;}
+.stat.wide{min-width:78px;}
+.stat.wide b{font-size:15px;}
 .stat b{display:block; font-size:18px; color:var(--gold); line-height:1;}
 .stat span{font-size:9px; color:var(--gray); letter-spacing:1px;}
 .chip{display:inline-block; background:#000; border:1px solid #444; color:var(--gold); font-size:10px; padding:2px 7px; border-radius:10px; letter-spacing:.5px;}

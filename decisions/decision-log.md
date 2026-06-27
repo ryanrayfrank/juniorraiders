@@ -147,6 +147,26 @@ has since been deleted; it is not in the repo.
     - **Cadence tracks game speed** — the HUT count interval now scales with the
       speed setting (Normal ×1, Slower ×1.5, Fast ×0.6) on top of a slower base.
 
+24. **Real football rules, touchdowns, and replay** (2026-06-26):
+    - **Touchdown bug fixed** — the carrier's y was clamped to its radius, so the
+      old `y <= 10` end-zone test could never fire and no run ever scored. The end
+      of a play is now: crossed the (visible) goal line → TD; broke free off the
+      top → big gain; otherwise tackled.
+    - **Down & distance + field position** — a possession now starts 1st & 10 on
+      the own 25 and drives toward the 100. Each play moves the ball by the yards
+      gained; cross the line to gain → first down (4 fresh tries); reach the 100 →
+      touchdown (6 pts, new drive); fail on 4th → turnover on downs (new drive).
+      A blown snap is a 5-yard penalty that replays the down. A session is 12
+      snaps; results show points, TDs, first downs, total yards, read %.
+    - **The field now teaches it** — the canvas draws the yellow dashed FIRST DOWN
+      "line to gain" and the red END ZONE (when within ~30 yds), and the sim is
+      handed `toGo`/`toGoal` so those lines match the real down & distance. The HUD
+      shows DOWN ("1st & 10"), BALL ON ("OWN 25"/"OPP 30"), and POINTS. Post-play
+      coaching now also explains the rule that just happened in plain language.
+    - **Replay** — every play is recorded frame-by-frame; a 🔁 REPLAY button on the
+      between-plays bar re-runs it over ~3.4s so the user can watch how everyone
+      moved without it flying by.
+
 ## Open / not yet done
 
 - Per-position coaching for the **rest of the offense** (currently the carrier

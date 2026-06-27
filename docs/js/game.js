@@ -45,6 +45,7 @@ export const Game = {
   init() {
     this.sim = new Sim($("field"));
     this.sim.onEnd = (r) => this.onPlayEnd(r);
+    this.sim.onReplayEnd = () => { $("pHint").textContent = "Read what happened, then tap NEXT (or press Space)."; };
     this.label = null;
     this.level = 2;
     this.speedIdx = 1;
@@ -113,8 +114,9 @@ export const Game = {
     $("gapR").onclick = () => { if ($("gapRow").classList.contains("active")) { SFX.tap(); this.sim.moveGap(1); } };
     $("gapReady").onclick = () => this.gapReady();
 
-    // advance to the next play (after reading the result)
+    // advance to the next play (after reading the result), or re-watch it
     $("nextBtn").onclick = () => this.advancePlay();
+    $("replayBtn").onclick = () => this.watchReplay();
 
     // SPRINT: hold to give the ball carrier a speed burst (no steering).
     // Capture the pointer so holding keeps working even if the finger/mouse
@@ -153,25 +155,59 @@ export const Game = {
   updateSpeedBtn() { $("speedBtn").innerHTML = SPEED_STATES[this.speedIdx].label; },
   applyTimeScale() { this.sim.setTimeScale(LEVEL_FACTOR[this.level] * SPEED_STATES[this.speedIdx].mult); },
 
+  // "1st & 10", "3rd & 2", "1st & Goal" - the down and yards-to-go.
+  downDistanceText() {
+    if (this.ballOn >= 100) return "TD!";
+    const names = ["1st", "2nd", "3rd", "4th"];
+    const dn = names[Math.min(this.down, 4) - 1];
+    const toGoal = 100 - this.ballOn;
+    const dist = this.toGo >= toGoal ? "Goal" : this.toGo;
+    return dn + " & " + dist;
+  },
+  ballOnText() {
+    // Show it the way a scoreboard does: which side of the 50 the ball is on.
+    if (this.ballOn >= 100) return "TD";
+    if (this.ballOn === 50) return "50";
+    return this.ballOn < 50 ? "OWN " + this.ballOn : "OPP " + (100 - this.ballOn);
+  },
+  updateHUD() {
+    $("pDown").textContent = this.downDistanceText();
+    $("pBallOn").textContent = this.ballOnText();
+    $("pScore").textContent = this.points;
+  },
+
   // ---------- drive ----------
   startDrive() {
-    this.order = [...PLAYS].sort(() => Math.random() - 0.5);
-    this.idx = 0;
-    this.driveYards = 0; this.tds = 0; this.streak = 0; this.bestStreak = 0; this.correctCount = 0; this.xpGain = 0;
+    // Real football: 4 downs to gain 10 yards (a first down) or score. Start a
+    // possession on our own 25 and drive toward the end zone (the 100).
+    this.maxPlays = 12;            // a session is this many snaps
+    this.playsRun = 0;
+    this.startNewSeries();
+    this.totalYards = 0; this.tds = 0; this.firstDowns = 0; this.points = 0;
+    this.streak = 0; this.bestStreak = 0; this.correctCount = 0; this.xpGain = 0;
     $("pChip").textContent = this.label + " \u00b7 L" + this.level;
     this.show("play");
     this.nextPlay();
   },
 
+  // Fresh possession: 1st & 10 on our own 25.
+  startNewSeries() {
+    this.ballOn = 25;     // yard line, 0 = our goal, 100 = their goal
+    this.down = 1;
+    this.toGo = 10;       // yards needed for a first down
+    this.pendingNewDrive = false;
+  },
+
   nextPlay() {
     this.clearTimers();
-    const play = this.order[this.idx];
+    const play = PLAYS[Math.floor(Math.random() * PLAYS.length)];
     const side = Math.random() < 0.5 ? "R" : "L";
     this.snapCount = 1 + Math.floor(Math.random() * 3); // play is "ON 1/2/3"
     this.cur = { play, side };
     this.playerCorrect = true;
     this.applyTimeScale();
-    this.sim.setup(play, side, this.label, true, LEVEL_FACTOR[this.level]);
+    const toGoal = 100 - this.ballOn;
+    this.sim.setup(play, side, this.label, true, LEVEL_FACTOR[this.level], this.toGo, toGoal);
     this.sim.gameLevel = this.level; // drives how forgiving the defense is
 
     $("gapRow").classList.remove("active");
@@ -179,9 +215,7 @@ export const Game = {
     $("sprintRow").classList.remove("active");
     $("nextRow").classList.remove("active");
 
-    $("pYards").textContent = this.driveYards;
-    $("pPlay").textContent = (this.idx + 1) + "/" + this.order.length;
-    $("pStreak").textContent = this.streak + "\uD83D\uDD25";
+    this.updateHUD();
     const callTxt = "I " + (side === "R" ? "RIGHT" : "LEFT") + " \u00b7 " + play.call + " \u00b7 ON " + this.snapCount;
     $("pCall").textContent = callTxt;
     const myAssign = assignmentFor(play, this.label, side);
@@ -248,7 +282,7 @@ export const Game = {
       if (sameSide) {
         SFX.bad();
         this.playerCorrect = false;
-        this.streak = 0; $("pStreak").textContent = this.streak + "\uD83D\uDD25";
+        this.streak = 0;
         $("pHint").textContent = "Fake AWAY from the ball \u2014 pick a hole on the OTHER side of the center.";
         return;
       }
@@ -262,7 +296,7 @@ export const Game = {
     if (picked !== realHole) {
       SFX.bad();
       this.playerCorrect = false; // missed the gap at least once -> counts against READS
-      this.streak = 0; $("pStreak").textContent = this.streak + "\uD83D\uDD25";
+      this.streak = 0;
       $("pHint").textContent = this.level === 3
         ? "Wrong gap \u2014 check the play number and try again."
         : "That's the " + picked + " hole. " + this.cur.play.num + " hits the " + realHole + " hole.";
@@ -339,7 +373,8 @@ export const Game = {
     this.sim.begin();
   },
 
-  // A blown snap count ends the play before it starts.
+  // A blown snap count is a 5-yard penalty. In real football a penalty replays
+  // the down (it doesn't use one up), but it pushes you 5 yards farther back.
   failCadence(type) {
     this.snapped = true;
     this.clearTimers();
@@ -347,44 +382,84 @@ export const Game = {
     $("cadWord").style.opacity = "0";
     SFX.bad();
     this.streak = 0;
-    $("pStreak").textContent = this.streak + "\uD83D\uDD25";
+    this.playsRun++;
+    const back = Math.min(5, this.ballOn - 1);
+    this.ballOn -= back; this.toGo += back; // penalty from the spot; same line to gain
+    this.updateHUD();
     const early = type === "early";
-    this.popCombo(early ? "FALSE START! \uD83D\uDEA9" : "TOO LATE! \uD83D\uDEA9", "#ff7b7b");
-    $("pTask").textContent = early
-      ? "\uD83D\uDEA9 Too early \u2014 false start. Wait for \u201cHUT " + this.snapCount + "\u201d."
-      : "\uD83D\uDEA9 Too late \u2014 the play broke down. Snap right on \u201cHUT " + this.snapCount + "\u201d.";
+    this.popCombo(early ? "FALSE START! \uD83D\uDEA9" : "DELAY! \uD83D\uDEA9", "#ff7b7b");
+    $("pTask").textContent = (early
+      ? "\uD83D\uDEA9 You moved too early \u2014 that's a FALSE START."
+      : "\uD83D\uDEA9 You waited too long \u2014 that's DELAY OF GAME.")
+      + " A penalty moves you back 5 yards and you redo the down. Snap right on \u201cHUT " + this.snapCount + "\u201d.";
     $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));
     this.endPlayPause();
   },
 
   // ---------- result of one play ----------
   onPlayEnd(r) {
-    this.driveYards += r.yards;
-    $("pYards").textContent = this.driveYards;
+    this.playsRun++;
 
     let score = 0;
     if (this.playerCorrect) { score += 10; this.correctCount++; this.streak++; this.bestStreak = Math.max(this.bestStreak, this.streak); }
     if (this.timing === "perfect") score += 5; else if (this.timing === "good") score += 2; else score -= 2;
     score += Math.max(0, r.yards);
-    if (r.td) { score += 20; this.tds++; }
+    if (r.td) score += 20;
     this.xpGain += Math.max(0, score);
 
-    // feedback
+    // Apply the gain to down & distance / field position (real football rules).
+    const outcome = this.applyResult(r.yards, r.td);
+
+    // feedback headline
     let head, color;
-    if (r.td) { head = "TOUCHDOWN! \uD83C\uDFC8"; color = "#ffd23f"; SFX.td(); }
-    else if (this.playerCorrect && r.yards > 4) { head = "+" + r.yards + " YARDS!"; color = "#27d17c"; SFX.big(); }
+    if (outcome === "TD") { head = "TOUCHDOWN! \uD83C\uDFC8"; color = "#ffd23f"; SFX.td(); }
+    else if (outcome === "FIRST") { head = "FIRST DOWN! \uD83C\uDF89"; color = "#27d17c"; SFX.big(); }
+    else if (outcome === "TURNOVER") { head = "TURNOVER!"; color = "#ff4d4d"; SFX.bad(); }
+    else if (r.yards > 4) { head = "+" + r.yards + " YARDS!"; color = "#27d17c"; SFX.big(); }
     else if (r.yards >= 0) { head = "+" + r.yards + " yds"; color = "#fff"; SFX.block(); }
     else { head = r.yards + " yds (loss)"; color = "#ff4d4d"; SFX.bad(); }
     this.popCombo(head, color);
 
-    // Always explain WHAT happened and HOW to do better - that's the whole point.
+    // Explain WHAT happened (coaching) + the football RULE that just applied.
     let task = this.explainPlay(r);
     if (!this.playerCorrect && !this.sim.isFaker) task += " (Remember: " + this.cur.play.num + " hits the " + this.cur.play.hole + " hole.)";
+    task += " " + this.rulesNote(outcome);
     $("pTask").textContent = task;
     $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));
-    $("pStreak").textContent = this.streak + "\uD83D\uDD25";
 
+    this.updateHUD();
     this.endPlayPause();
+  },
+
+  // Move the ball, the chains, and the down. Returns the outcome of the play.
+  applyResult(gained, isTD) {
+    this.totalYards += gained;
+    const lineToGain = this.ballOn + this.toGo;
+    const newBallOn = this.ballOn + gained;
+
+    if (isTD || newBallOn >= 100) {
+      this.points += 6; this.tds++; this.ballOn = 100; this.pendingNewDrive = true;
+      return "TD";
+    }
+    this.ballOn = Math.max(1, Math.min(99, newBallOn));
+    if (newBallOn >= lineToGain) {
+      this.firstDowns++; this.down = 1; this.toGo = Math.min(10, 100 - this.ballOn);
+      return "FIRST";
+    }
+    this.down++;
+    this.toGo = lineToGain - this.ballOn;
+    if (this.down > 4) { this.pendingNewDrive = true; return "TURNOVER"; }
+    return "DOWN";
+  },
+
+  // Teach the rule that just happened, in plain language.
+  rulesNote(outcome) {
+    if (outcome === "TD") return "\uD83C\uDFC8 You reached the END ZONE \u2014 that's a TOUCHDOWN, 6 points!";
+    if (outcome === "FIRST") return "You crossed the yellow line \u2014 FIRST DOWN! You get 4 fresh tries to go 10 more yards.";
+    if (outcome === "TURNOVER") return "That was 4th down and you didn't reach the yellow line, so the other team gets the ball. New drive!";
+    // still driving
+    const left = 5 - this.down; // tries remaining including this upcoming down
+    return "Now it's " + this.downDistanceText() + " \u2014 " + left + (left === 1 ? " try" : " tries") + " left to reach the yellow line.";
   },
 
   // Pause after a play so the coaching stays on screen until the user taps NEXT.
@@ -393,18 +468,26 @@ export const Game = {
     $("gapRow").classList.remove("active");
     $("snapRow").classList.remove("active");
     $("sprintRow").classList.remove("active");
-    const last = (this.idx + 1) >= this.order.length;
+    const last = this.playsRun >= this.maxPlays;
     $("nextBtn").innerHTML = last ? "\u25b6 SEE RESULTS" : "\u25b6 NEXT PLAY";
     $("nextRow").classList.add("active");
-    $("pHint").textContent = "Read what happened, then tap NEXT (or press Space).";
+    $("pHint").textContent = "Tap \uD83D\uDD01 REPLAY to watch it again, or NEXT to keep going (Space).";
+  },
+
+  // Re-run the just-finished play so the user can watch how everyone moved.
+  watchReplay() {
+    if (!$("nextRow").classList.contains("active")) return;
+    SFX.tap();
+    if (this.sim.playReplay()) $("pHint").textContent = "Replaying the play\u2026 watch how everyone moved.";
   },
 
   advancePlay() {
     if (!$("nextRow").classList.contains("active")) return;
     SFX.tap();
     $("nextRow").classList.remove("active");
-    this.idx++;
-    if (this.idx >= this.order.length) this.showResults(); else this.nextPlay();
+    if (this.playsRun >= this.maxPlays) { this.showResults(); return; }
+    if (this.pendingNewDrive) this.startNewSeries();
+    this.nextPlay();
   },
 
   // Plain, encouraging coaching an 11-year-old can follow - no football jargon.
@@ -444,17 +527,17 @@ export const Game = {
   // ---------- results ----------
   showResults() {
     this.sim.stop();
-    const acc = Math.round((this.correctCount / this.order.length) * 100);
-    const best = Math.max(Storage.bestDrive(), this.driveYards);
+    const acc = this.playsRun ? Math.round((this.correctCount / this.playsRun) * 100) : 0;
+    const best = Math.max(Storage.bestDrive(), this.totalYards);
     Storage.setBestDrive(best); Storage.addXP(this.xpGain);
-    $("resTitle").textContent = this.tds > 0 ? "DRIVE COMPLETE! \uD83C\uDFC8" : "DRIVE COMPLETE!";
-    $("resScore").textContent = this.driveYards;
-    $("resUnit").textContent = "TOTAL YARDS";
+    $("resTitle").textContent = this.tds > 0 ? "GAME OVER! \uD83C\uDFC8" : "GAME OVER!";
+    $("resScore").textContent = this.points;
+    $("resUnit").textContent = "POINTS";
     $("resRow").innerHTML =
       this.card(this.tds, "TDs") +
-      this.card(acc + "%", "READS") +
-      this.card(this.bestStreak + "\uD83D\uDD25", "BEST STREAK") +
-      this.card("+" + this.xpGain, "XP");
+      this.card(this.firstDowns, "1ST DOWNS") +
+      this.card(this.totalYards, "TOTAL YDS") +
+      this.card(acc + "%", "READS");
     this.show("result");
   },
   card(b, s) { return '<div class="resCard"><b>' + b + "</b><span>" + s + "</span></div>"; },
