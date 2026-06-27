@@ -13,6 +13,15 @@ import { assignmentFor, actionType } from "./plays.js";
 
 const SPEED = { QB: 140, FB: 150, TB: 155, OL: 135, WR: 150, DL: 120, LB: 150, DB: 170 };
 
+// Holes left-to-right across the line. Odd holes are left of center, even right.
+const HOLE_ORDER = { 5: 0, 3: 1, 1: 2, 2: 3, 4: 4, 6: 5 };
+// The best hole to fake toward: the one on the OPPOSITE side, farthest from the ball.
+function farOppositeHole(realHole) {
+  const opp = [1, 2, 3, 4, 5, 6].filter((h) => h % 2 !== realHole % 2);
+  opp.sort((a, b) => Math.abs(HOLE_ORDER[b] - HOLE_ORDER[realHole]) - Math.abs(HOLE_ORDER[a] - HOLE_ORDER[realHole]));
+  return opp[0];
+}
+
 function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
 
 export class Sim {
@@ -21,6 +30,7 @@ export class Sim {
     this.ctx = canvas.getContext("2d");
     this.running = false;
     this.timeScale = 1;
+    this.burst = false;
     this.onEnd = null;
     this.gaps = null;
     this.selGapIdx = 0;
@@ -89,6 +99,7 @@ export class Sim {
     this.isPlayerCarrier = playerLabel === play.carrier;
     this.botch = false;
     const pp = offense.find((o) => o.label === playerLabel);
+    this.playerAction = pp ? pp.action : null;
     if (pp) {
       if (pp.action === "CARRY" || pp.action === "HANDOFF") { if (!playerCorrect) this.botch = true; }
       else if (!playerCorrect && pp.targetId != null) { pp.targetId = null; pp.missed = true; }
@@ -96,12 +107,24 @@ export class Sim {
 
     // Defenders nobody blocks become pursuers (the real tacklers).
     const targeted = new Set(offense.map((o) => o.targetId).filter((x) => x != null));
-    defense.forEach((d) => { d.pursuer = !targeted.has(d.id); });
+    defense.forEach((d) => { d.pursuer = !targeted.has(d.id); d.chaseFake = false; });
 
     const qb = offense.find((o) => o.label === "QB");
     this.carrier = offense.find((o) => o.label === play.carrier);
-    this.ball = { carrierId: qb.id, handoffAt: play.type === "DIVE" ? 0.32 : 0.6 };
-    this.meshX = cx; this.meshY = this.losY + 26;
+    this.ball = { carrierId: qb.id, handoffAt: play.type === "DIVE" ? 0.34 : 0.62 };
+    // Reverse-pivot handoff: the QB drops back to meet the deep back. On a dive
+    // the mesh is shallow (quick hitter); on a lead/power it's deeper so the TB
+    // takes it behind the FB and can follow him through the hole.
+    this.meshX = cx; this.meshY = this.losY + (play.carrier === "FB" ? 48 : 66);
+
+    // Fake (boot/misdirection): the non-carrying back carries out a fake to pull
+    // defenders away from the ball. If the human IS the faker they pick the fake
+    // gap pre-snap; otherwise the AI fakes to the far opposite hole automatically.
+    this.faker = offense.find((o) => o.action === "FAKE") || null;
+    this.isFaker = !!(pp && pp.action === "FAKE");
+    this.fakeX = null; this.pulled = 0;
+    this.gapCorrectHole = this.isFaker ? farOppositeHole(play.hole) : play.hole;
+    if (this.faker && !this.isFaker) this.applyFake(farOppositeHole(play.hole));
 
     this.t = 0;
     this.phase = "pre";
@@ -138,12 +161,13 @@ export class Sim {
   // ---- pre-snap gap selection (ball carrier picks the hole) ----
   // Builds the six numbered holes left-to-right and lets the player slide a lane
   // selector to the gap they intend to attack, just like the original demo.
-  enterGapSelect(showCorrect) {
+  enterGapSelect(showCorrect, correctHole) {
     const holes = [1, 2, 3, 4, 5, 6];
     this.gaps = holes
       .map((h) => ({ hole: h, x: holeX(this.offense, h, this.side) }))
       .sort((a, b) => a.x - b.x);
     this.showCorrectGap = !!showCorrect;
+    if (correctHole != null) this.gapCorrectHole = correctHole;
     // Start the selector on the middle-ish gap so the player has to move it.
     this.selGapIdx = Math.floor(this.gaps.length / 2);
     this.gapX = this.gaps[this.selGapIdx].x;
@@ -165,8 +189,31 @@ export class Sim {
     this.render();
   }
 
+  // The human chose a fake gap: keep the real running lane (the FB's hole) but
+  // run the fake toward the picked hole. Then clear the selector UI.
+  lockFakeFromSelection() {
+    const hole = this.selectedHole();
+    this.applyFake(hole);
+    this.gaps = null;
+    this.phase = "pre";
+    this.render();
+  }
+
+  // Set the fake target and decide how many defenders "bite" based on how far
+  // the fake is from the ball (farther away = more defenders pulled = better).
+  applyFake(fakeHole) {
+    this.fakeX = holeX(this.offense, fakeHole, this.side);
+    const sep = Math.abs((HOLE_ORDER[fakeHole] ?? 2) - (HOLE_ORDER[this.play.hole] ?? 3));
+    this.pulled = sep >= 3 ? 2 : (sep === 2 ? 1 : 0);
+    this.defense.forEach((d) => (d.chaseFake = false));
+    const pool = this.defense.filter((d) => d.role === "LB" || d.role === "DB");
+    pool.sort((a, b) => Math.abs(a.hx - this.fakeX) - Math.abs(b.hx - this.fakeX));
+    for (let i = 0; i < this.pulled && i < pool.length; i++) pool[i].chaseFake = true;
+  }
+
   // ---- live control ----
   begin() { this.gaps = null; this.phase = "live"; this.t = 0; this.last = 0; if (!this.running) { this.running = true; requestAnimationFrame(this.loop); } }
+  setBurst(b) { this.burst = b; }
   setTimeScale(s) { this.timeScale = s; }
 
   start() { if (!this.running) { this.running = true; this.last = 0; requestAnimationFrame(this.loop); } }
@@ -225,6 +272,10 @@ export class Sim {
           tgt.x = o.x + Math.cos(away) * (o.r + tgt.r - 1);
           tgt.y = o.y + Math.sin(away) * (o.r + tgt.r - 1);
         }
+      } else if (o.action === "FAKE") {
+        // sell the fake: sprint toward the fake gap, away from the real ball
+        const fx = this.fakeX != null ? this.fakeX : o.x;
+        this.moveToward(o, fx, this.losY - 12, st, 0.95);
       } else if (o.role === "WR") {
         this.moveToward(o, o.hx, this.losY - 60, st, 0.7);
       }
@@ -243,6 +294,8 @@ export class Sim {
     for (const d of this.defense) {
       if (d.engaged) continue;
       if (!react) { this.moveToward(d, d.x, this.losY - 20, st, 0.35); continue; }
+      // defenders fooled by the fake chase the faker instead of the real ball
+      if (d.chaseFake && this.faker) { this.moveToward(d, this.faker.x, this.faker.y, st, pursuit); continue; }
       this.moveToward(d, ballX, ballY, st, this.botch && d.pursuer ? 1.05 : pursuit);
     }
 
@@ -271,7 +324,9 @@ export class Sim {
   runCarrier(st) {
     const c = this.carrier;
     // The user already chose the gap pre-snap, so the back runs it automatically:
-    // hit the chosen hole, then climb to daylight away from the nearest free defender.
+    // hit the chosen hole, then climb to daylight away from the nearest free
+    // defender. Holding SPRINT (player carrier only) gives a speed burst.
+    const boost = (this.isPlayerCarrier && this.burst) ? 1.25 : 1;
     let tx, ty;
     if (c.y > this.losY - 6) { tx = this.gapX; ty = this.losY - 14; }
     else {
@@ -280,7 +335,7 @@ export class Sim {
       const dodge = nd ? (c.x < nd.x ? -1 : 1) * 26 : 0;
       tx = Math.max(c.r, Math.min(this.W - c.r, c.x + dodge)); ty = 0;
     }
-    this.moveToward(c, tx, ty, st, this.botch ? 0.7 : 1);
+    this.moveToward(c, tx, ty, st, (this.botch ? 0.7 : 1) * boost);
     c.x = Math.max(c.r, Math.min(this.W - c.r, c.x));
   }
 
@@ -289,7 +344,7 @@ export class Sim {
     this.phase = "over";
     let yards = Math.round((this.losY - this.carrier.y) / this.pxPerYard);
     if (td) yards = Math.max(yards, Math.round(this.losY / this.pxPerYard));
-    this.result = { td, yards, tackler: tackler ? tackler.label : null, botch: this.botch };
+    this.result = { td, yards, tackler: tackler ? tackler.label : null, botch: this.botch, faker: this.isFaker, pulled: this.pulled };
     if (this.onEnd) this.onEnd(this.result);
   }
 
@@ -335,7 +390,7 @@ export class Sim {
   drawGaps() {
     const ctx = this.ctx;
     const y = this.losY - 16; // right at the line, in the clear band below the D-line
-    const correctHole = this.play ? this.play.hole : null;
+    const correctHole = this.gapCorrectHole != null ? this.gapCorrectHole : (this.play ? this.play.hole : null);
     ctx.font = "bold 13px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     this.gaps.forEach((g, i) => {
       const sel = i === this.selGapIdx;

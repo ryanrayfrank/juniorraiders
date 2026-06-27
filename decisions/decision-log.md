@@ -115,6 +115,26 @@ has since been deleted; it is not in the repo.
     to daylight). Removed the ◀ / SPRINT / ▶ row, swipe-to-steer, and arrow/burst
     keyboard during the live play. Arrows now only move the gap selector. The
     player just watches the result of their pre-snap read.
+22. **SPRINT back (speed only), realism & beginner coaching** (2026-06-26):
+    - **SPRINT button is back, no steering** — a single "HOLD TO SPRINT" button
+      (and hold Space) gives the ball carrier a ~25% speed burst through the hole.
+      There is still no directional steering; the back auto-runs the chosen gap.
+      The button only shows when the user is the ball carrier.
+    - **Speed settings re-tiered** — the old "Slow" is now the default **Normal**
+      (mult 0.6) and a new **Slower** (0.4) is even gentler. Fast is now 1.0.
+    - **Realistic handoff** — the QB now reverse-pivots *back* to meet the deep
+      back instead of standing still. Mesh point is deeper on lead/power so the TB
+      takes the ball **behind** the FB and can follow him through the hole (it's no
+      longer a straight sprint up past the FB). Dive mesh stays shallow/quick.
+    - **TB fake on dives** — when the user is the TB on a dive (e.g. 22, FB carries)
+      the gap picker now asks them to **fake**: pick a hole on the *other* side of
+      the ball. Faking farther away pulls more defenders (0/1/2 linebackers/DBs
+      chase the faker), which frees the real runner for more yards. The AI TB does
+      the same automatically when the user is the FB.
+    - **Coaching rewritten for an 11-year-old** — removed football jargon and
+      tackler/position names; feedback is now plain and encouraging ("A defender
+      got you behind the line — that's okay! Hold SPRINT the moment you get the
+      ball…"), with specific fake feedback ("you pulled TWO defenders — he got X!").
 
 ## Open / not yet done
 

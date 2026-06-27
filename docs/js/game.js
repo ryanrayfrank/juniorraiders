@@ -20,12 +20,6 @@ const DESC = {
 };
 
 // Readable defender names for post-play coaching explanations.
-const DEF_NAMES = {
-  E: "defensive end", N: "nose guard",
-  R: "Rover linebacker", S: "Sam linebacker", M: "Mike linebacker", W: "Will linebacker", B: "Bandit linebacker",
-  LC: "cornerback", RC: "cornerback", H: "safety",
-};
-
 // Picker layout (percent of the formation box).
 const OFF_CHIPS = [
   { l: "X", x: 7, y: 34 }, { l: "Z", x: 93, y: 34 },
@@ -40,10 +34,11 @@ const DEF_CHIPS = [
 ];
 
 const LEVEL_FACTOR = { 1: 0.5, 2: 0.7, 3: 1.0 };
+// "Normal" is the old "Slow" pace; "Slower" is an even gentler setting for new players.
 const SPEED_STATES = [
-  { id: "slow", label: "&#128034; Slow", mult: 0.6 },
-  { id: "normal", label: "&#9654; Normal", mult: 1.0 },
-  { id: "fast", label: "&#9889; Fast", mult: 1.5 },
+  { id: "slower", label: "&#128034; Slower", mult: 0.4 },
+  { id: "normal", label: "&#9654; Normal", mult: 0.6 },
+  { id: "fast", label: "&#9889; Fast", mult: 1.0 },
 ];
 
 export const Game = {
@@ -121,7 +116,15 @@ export const Game = {
     // advance to the next play (after reading the result)
     $("nextBtn").onclick = () => this.advancePlay();
 
-    // keyboard: arrows only move the gap selector; Space/Enter confirms the active step.
+    // SPRINT: hold to give the ball carrier a speed burst (no steering)
+    const sb = $("sprintBtn");
+    sb.addEventListener("pointerdown", (e) => { e.preventDefault(); this.sim.setBurst(true); });
+    sb.addEventListener("pointerup", () => this.sim.setBurst(false));
+    sb.addEventListener("pointerleave", () => this.sim.setBurst(false));
+    sb.addEventListener("pointercancel", () => this.sim.setBurst(false));
+
+    // keyboard: arrows move the gap selector; Space/Enter confirms the active step;
+    // during the live run, holding Space sprints.
     window.addEventListener("keydown", (e) => {
       if (!$("play").classList.contains("active")) return;
       const gap = $("gapRow").classList.contains("active");
@@ -132,8 +135,10 @@ export const Game = {
         if (gap) this.gapReady();
         else if ($("nextRow").classList.contains("active")) this.advancePlay();
         else if ($("snapRow").classList.contains("active")) this.onSnap();
+        else if ($("sprintRow").classList.contains("active")) this.sim.setBurst(true);
       }
     });
+    window.addEventListener("keyup", (e) => { if (e.code === "Space" || e.code === "Enter") this.sim.setBurst(false); });
     window.addEventListener("resize", () => { if (this.sim.phase === "pre") this.sim.measure(); });
   },
 
@@ -164,6 +169,7 @@ export const Game = {
 
     $("gapRow").classList.remove("active");
     $("snapRow").classList.remove("active");
+    $("sprintRow").classList.remove("active");
     $("nextRow").classList.remove("active");
 
     $("pYards").textContent = this.driveYards;
@@ -188,18 +194,28 @@ export const Game = {
     this.sim.enterGapSelect(this.level === 1);
     $("gapRow").classList.add("active");
     $("snapRow").classList.remove("active");
+    $("sprintRow").classList.remove("active");
     const hole = this.cur.play.hole;
     const youCarry = this.sim.isPlayerCarrier;
+    const youFake = this.sim.isFaker;
+    const fakeHole = this.sim.gapCorrectHole; // the green target on a fake
     if (this.level === 1) {
       // Teach: keep the full breakdown up top, put the simple action below.
-      $("pHint").textContent = youCarry
-        ? "Slide \u25c0 \u25b6 to the green " + hole + " (YOUR hole), then READY."
-        : "Slide \u25c0 \u25b6 to the green " + hole + " (where the ball goes), then READY.";
+      if (youFake) {
+        $("pTask").textContent = "You FAKE on this one! Run the OTHER way to trick the defense so the fullback has room.";
+        $("pHint").textContent = "Slide \u25c0 \u25b6 to the green " + fakeHole + " (far from the ball), then READY.";
+      } else if (youCarry) {
+        $("pHint").textContent = "Slide \u25c0 \u25b6 to the green " + hole + " (YOUR hole), then READY.";
+      } else {
+        $("pHint").textContent = "Slide \u25c0 \u25b6 to the green " + hole + " (where the ball goes), then READY.";
+      }
     } else {
       $("pHint").textContent = "Pick the hole \u2014 \u25c0 \u25b6 then READY";
-      $("pTask").textContent = youCarry
-        ? "Which hole do YOU run on " + this.cur.play.num + "? Slide there."
-        : "Where does the ball go on " + this.cur.play.num + "? Pick that hole.";
+      $("pTask").textContent = youFake
+        ? "You're faking! Pick a hole on the FAR side, away from the ball, to pull the defense."
+        : (youCarry
+          ? "Which hole do YOU run on " + this.cur.play.num + "? Slide there."
+          : "Where does the ball go on " + this.cur.play.num + "? Pick that hole.");
     }
   },
 
@@ -217,13 +233,32 @@ export const Game = {
   gapReady() {
     if (!$("gapRow").classList.contains("active")) return;
     const picked = this.sim.selectedHole();
-    if (picked !== this.cur.play.hole) {
+    const realHole = this.cur.play.hole;
+
+    if (this.sim.isFaker) {
+      // A fake must go to the OTHER side of the ball (different odd/even parity).
+      const sameSide = (picked % 2) === (realHole % 2);
+      if (sameSide) {
+        SFX.bad();
+        this.playerCorrect = false;
+        this.streak = 0; $("pStreak").textContent = this.streak + "\uD83D\uDD25";
+        $("pHint").textContent = "Fake AWAY from the ball \u2014 pick a hole on the OTHER side of the center.";
+        return;
+      }
+      SFX.tap();
+      this.sim.lockFakeFromSelection();
+      $("gapRow").classList.remove("active");
+      this.startCadence();
+      return;
+    }
+
+    if (picked !== realHole) {
       SFX.bad();
       this.playerCorrect = false; // missed the gap at least once -> counts against READS
       this.streak = 0; $("pStreak").textContent = this.streak + "\uD83D\uDD25";
       $("pHint").textContent = this.level === 3
         ? "Wrong gap \u2014 check the play number and try again."
-        : "That's the " + picked + " hole. " + this.cur.play.num + " hits the " + this.cur.play.hole + " hole.";
+        : "That's the " + picked + " hole. " + this.cur.play.num + " hits the " + realHole + " hole.";
       return;
     }
     SFX.tap();
@@ -282,9 +317,14 @@ export const Game = {
     this.timing = "perfect"; // snapped on the right count
     $("snapRow").classList.remove("active");
     SFX.snap();
-    $("pHint").textContent = this.sim.isPlayerCarrier
-      ? "You've got the ball \u2014 watch yourself run the hole you picked!"
-      : "Watch the ball \u2014 your block springs the runner!";
+    if (this.sim.isPlayerCarrier) {
+      $("sprintRow").classList.add("active");
+      $("pHint").textContent = "You've got the ball! Hold SPRINT to burst through your hole for more yards.";
+    } else if (this.sim.isFaker) {
+      $("pHint").textContent = "Watch yourself fake the other way and pull the defense \u2014 it frees the runner!";
+    } else {
+      $("pHint").textContent = "Watch the ball \u2014 your block springs the runner!";
+    }
     this.applyTimeScale();
     this.sim.begin();
   },
@@ -329,7 +369,7 @@ export const Game = {
 
     // Always explain WHAT happened and HOW to do better - that's the whole point.
     let task = this.explainPlay(r);
-    if (!this.playerCorrect) task += " (Remember: " + this.cur.play.num + " hits the " + this.cur.play.hole + " hole.)";
+    if (!this.playerCorrect && !this.sim.isFaker) task += " (Remember: " + this.cur.play.num + " hits the " + this.cur.play.hole + " hole.)";
     $("pTask").textContent = task;
     $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));
     $("pStreak").textContent = this.streak + "\uD83D\uDD25";
@@ -339,8 +379,10 @@ export const Game = {
 
   // Pause after a play so the coaching stays on screen until the user taps NEXT.
   endPlayPause() {
+    this.sim.setBurst(false);
     $("gapRow").classList.remove("active");
     $("snapRow").classList.remove("active");
+    $("sprintRow").classList.remove("active");
     const last = (this.idx + 1) >= this.order.length;
     $("nextBtn").innerHTML = last ? "\u25b6 SEE RESULTS" : "\u25b6 NEXT PLAY";
     $("nextRow").classList.add("active");
@@ -355,23 +397,33 @@ export const Game = {
     if (this.idx >= this.order.length) this.showResults(); else this.nextPlay();
   },
 
-  // Turn the simulated result into a coaching sentence: what happened + a fix.
+  // Plain, encouraging coaching an 11-year-old can follow - no football jargon.
   explainPlay(r) {
     const youCarry = this.sim.isPlayerCarrier;
-    const who = r.tackler ? (DEF_NAMES[r.tackler] || "defender") : "the defense";
+
+    if (r.faker) {
+      const ran = r.yards;
+      if (r.pulled >= 2) return "\uD83C\uDFAD Awesome fake! You ran the other way and TWO defenders chased you. That left the runner wide open \u2014 he got " + ran + " yards!";
+      if (r.pulled === 1) return "\uD83C\uDFAD Good fake \u2014 ONE defender chased you. Run even FARTHER from the ball to trick more of them. (The runner got " + ran + ".)";
+      return "Nobody fell for it \u2014 you faked too close to the ball. Run to the FAR side, away from where the ball is going, to trick the defenders. (The runner got " + ran + ".)";
+    }
+
     if (r.td) {
       return youCarry
-        ? "\uD83C\uDFC8 Touchdown! You hit the hole clean and outran everyone. Perfect rep."
-        : "\uD83C\uDFC8 Touchdown! Your block sprung the runner all the way. Great job.";
+        ? "\uD83C\uDFC8 Touchdown! You ran through your hole and nobody could catch you. Awesome!"
+        : "\uD83C\uDFC8 Touchdown! Your block helped the runner score. Great job!";
     }
+
     if (youCarry) {
-      if (r.yards <= 0) return "Stuffed for " + r.yards + ". The " + who + " shot through before your blocks set up \u2014 get downhill the moment you have the ball, stay tight behind your blockers, and tap GO to burst through the hole.";
-      if (r.yards <= 3) return "+" + r.yards + ", but the " + who + " filled fast. Hit the hole quicker and tap GO to burst before it closes.";
-      if (r.yards <= 7) return "+" + r.yards + " \u2014 solid. You pressed the hole and fell forward. Steer away from the " + who + " to find a little more daylight.";
-      return "+" + r.yards + " \u2014 great run! You hit the hole and got vertical past the " + who + ".";
+      if (r.yards <= 0) return "A defender got you behind the line for " + r.yards + ". That's okay \u2014 it happens! Next time hold SPRINT the moment you get the ball so you shoot through the hole before it closes.";
+      if (r.yards <= 3) return "You got " + r.yards + " yards, but a defender filled the hole fast. Hold SPRINT right away to burst through quicker and get more.";
+      if (r.yards <= 7) return "Nice \u2014 " + r.yards + " yards! You ran through the right hole. Hold SPRINT to go even faster and pick up extra yards.";
+      return "Great run \u2014 " + r.yards + " yards! You hit the hole fast and zoomed past the defense. \uD83C\uDFC8";
     }
-    if (r.yards <= 0) return "The runner was stopped for " + r.yards + ". Drive your man out of the hole and stay on the block longer to open a lane.";
-    return "+" + r.yards + " for the runner. " + (r.yards > 6 ? "Your block helped spring him \u2014 nice work." : "Sustain your block a beat longer to open even more room.");
+
+    // blocker
+    if (r.yards <= 0) return "The runner got stopped. Your job is to push your defender out of the way \u2014 stay in front of him longer to open the hole.";
+    return "Nice block! The runner followed you for " + r.yards + " yards. " + (r.yards > 6 ? "You opened a big hole!" : "Stay on your block a little longer to make the hole even bigger.");
   },
 
   popCombo(txt, color) {

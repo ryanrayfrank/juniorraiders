@@ -28,10 +28,12 @@ export function buildFormation(W, H, losY, side) {
   offense.push(mk("RT", "OL", "OFF", cx + 2 * SP, losY + 4));
   offense.push(mk("Y", "OL", "OFF", side === "R" ? cx + 3 * SP : cx - 3 * SP, losY + 4));
 
-  // Backfield (the "I"), straight behind the Center.
-  offense.push(mk("QB", "QB", "OFF", cx, losY + 30));
-  offense.push(mk("FB", "FB", "OFF", cx, losY + 64));
-  offense.push(mk("TB", "TB", "OFF", cx, losY + 98));
+  // Backfield (the "I"), straight behind the Center. The QB is right behind the
+  // center; the FB and TB stack behind him. On a handoff the QB reverse-pivots
+  // back to meet the deep back, so the TB still stays behind the FB.
+  offense.push(mk("QB", "QB", "OFF", cx, losY + 28));
+  offense.push(mk("FB", "FB", "OFF", cx, losY + 54));
+  offense.push(mk("TB", "TB", "OFF", cx, losY + 92));
 
   // Wide receivers split to the sidelines. I Right: X left / Z right. I Left: flipped.
   const farL = 24, farR = W - 24;
