@@ -75,6 +75,13 @@ See [`architecture.md`](architecture.md) for how the code is organized.
 
 ## Conventions / preferences we've settled on
 
+- **Commit + push changes automatically.** While the user is actively testing,
+  after making code changes the agent should **commit and push to `main`** without
+  being asked each time (this deploys to GitHub Pages). Also **bump the build
+  version** (see `architecture.md` → "Versioning / cache-busting") so the badge in
+  the app's corner confirms the new build is live. Use multiple `-m` flags for the
+  commit message — PowerShell here does **not** support `&&` chaining or `<<'EOF'`
+  heredocs.
 - **$0 forever.** No paid hosting, no app store, no installs. Runs in any browser.
 - All players are **one consistent chip style** per team (no per-position colors);
   labels centered; the ball carrier is highlighted gold.
