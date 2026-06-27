@@ -199,6 +199,17 @@ has since been deleted; it is not in the repo.
       (L1). On the harder levels the player has to learn to read the gap by where
       it sits in the line. (A wrong pick in L2 still names the right hole after.)
 
+27. **Sprint "glitch" (pile vibration) properly fixed** (2026-06-27): a GIF showed
+    the ball carrier and the blocked pile around him vibrating while SPRINT was
+    held. Root cause: the carrier's sideways steer changed abruptly each frame
+    (defenders flicking in/out of the "ahead of me" test) and, because every
+    blocker positions its defender relative to the ball carrier, the carrier's
+    jitter shook the whole pile (the burst amplified it). Fix: past the line the
+    carrier now drives **straight upfield** with the forward motion decoupled from
+    a **low-pass-filtered sidestep** (a closeness-weighted blend of all free
+    defenders ahead), so the steer can never snap frame-to-frame. `p.steer` is
+    reset each play.
+
 ## Open / not yet done
 
 - Per-position coaching for the **rest of the offense** (currently the carrier

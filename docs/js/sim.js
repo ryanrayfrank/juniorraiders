@@ -92,7 +92,7 @@ export class Sim {
 
     let id = 0;
     this.players = [...offense, ...defense];
-    this.players.forEach((p) => { p.id = id++; p.vx = 0; p.vy = 0; p.engaged = false; p.engagedBy = null; p.targetId = null; p.missed = false; });
+    this.players.forEach((p) => { p.id = id++; p.vx = 0; p.vy = 0; p.engaged = false; p.engagedBy = null; p.targetId = null; p.missed = false; p.steer = 0; });
     this.offense = offense; this.defense = defense;
 
     this.gapX = holeX(offense, play.hole, side);
@@ -378,32 +378,39 @@ export class Sim {
 
   runCarrier(st) {
     const c = this.carrier;
-    // The user already chose the gap pre-snap, so the back runs it automatically:
-    // hit the chosen hole, then climb to daylight away from the nearest free
-    // defender. Holding SPRINT (player carrier only) gives a speed burst.
+    // The user already chose the gap pre-snap, so the back runs it automatically.
+    // Holding SPRINT (player carrier only) gives a speed burst.
     const boost = (this.isPlayerCarrier && this.burst) ? 1.6 : 1;
-    let tx, ty;
-    if (c.y > this.losY - 6) { tx = this.gapX; ty = this.losY - 14; }
-    else {
-      // Past the line, climb to daylight. Steer away from EVERY free defender
-      // ahead of the back, weighted by how close he is, and sum it into one
-      // smooth drift. Blending all threats (instead of hard-aiming at the single
-      // nearest one) stops the left-right wobble/"glitch" that the SPRINT boost
-      // used to amplify.
-      let push = 0;
-      for (const d of this.defense) {
-        if (d.engaged) continue;
-        if (d.y > c.y - c.r) continue;        // only defenders ahead of the back
-        const dd = dist(d.x, d.y, c.x, c.y);
-        if (dd > 95) continue;
-        const w = (95 - dd) / 95;             // closer = stronger
-        push += (c.x >= d.x ? 1 : -1) * w;    // drift away from him
-      }
-      push = Math.max(-1, Math.min(1, push));
-      tx = c.x + push * 30; ty = 0;
+    const spd = c.speed * st * (this.botch ? 0.7 : 1) * boost;
+
+    // Behind/at the line: aim for the chosen hole.
+    if (c.y > this.losY - 6) {
+      this.moveToward(c, this.gapX, this.losY - 14, st, (this.botch ? 0.7 : 1) * boost);
+      c.x = Math.max(c.r, Math.min(this.W - c.r, c.x));
+      return;
     }
-    tx = Math.max(c.r, Math.min(this.W - c.r, tx));
-    this.moveToward(c, tx, ty, st, (this.botch ? 0.7 : 1) * boost);
+
+    // Past the line: drive STRAIGHT upfield, with only a gently smoothed sidestep
+    // to find daylight. The sidestep is a closeness-weighted blend of every free
+    // defender ahead, then low-pass filtered so it can never snap frame-to-frame.
+    // Decoupling forward motion from the steer (and smoothing the steer) is what
+    // stops the carrier - and the blocked pile that positions off him - from
+    // vibrating, especially with the SPRINT boost on.
+    let push = 0;
+    for (const d of this.defense) {
+      if (d.engaged) continue;
+      if (d.y >= c.y) continue;               // only defenders ahead (upfield)
+      const dd = dist(d.x, d.y, c.x, c.y);
+      if (dd > 110) continue;
+      const w = (110 - dd) / 110;
+      push += (c.x >= d.x ? 1 : -1) * w * w;   // softly favor the closest threats
+    }
+    push = Math.max(-1.2, Math.min(1.2, push));
+    const ease = Math.min(1, st * 6);          // time-based low-pass smoothing
+    c.steer = (c.steer || 0) + (push - (c.steer || 0)) * ease;
+
+    c.y -= spd;                                // forward, never stutters
+    c.x += c.steer * spd * 0.6;                // gentle, smoothed drift
     c.x = Math.max(c.r, Math.min(this.W - c.r, c.x));
   }
 
