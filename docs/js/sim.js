@@ -110,6 +110,7 @@ export class Sim {
     defense.forEach((d) => { d.pursuer = !targeted.has(d.id); d.chaseFake = false; });
 
     const qb = offense.find((o) => o.label === "QB");
+    this.qb = qb;
     this.carrier = offense.find((o) => o.label === play.carrier);
     this.ball = { carrierId: qb.id, handoffAt: play.type === "DIVE" ? 0.34 : 0.62 };
     // Reverse-pivot handoff: the QB drops back to meet the deep back. On a dive
@@ -189,11 +190,13 @@ export class Sim {
     this.render();
   }
 
-  // The human chose a fake gap: keep the real running lane (the FB's hole) but
-  // run the fake toward the picked hole. Then clear the selector UI.
+  // The human chose a fake gap: the real carrier still runs the play's real
+  // hole, while the human runs the fake toward the picked hole. Moving the gap
+  // selector reused this.gapX, so restore it to the real hole here.
   lockFakeFromSelection() {
     const hole = this.selectedHole();
     this.applyFake(hole);
+    this.gapX = holeX(this.offense, this.play.hole, this.side);
     this.gaps = null;
     this.phase = "pre";
     this.render();
@@ -238,7 +241,10 @@ export class Sim {
   update(dt) {
     const st = dt * this.timeScale;
     this.t += st;
-    const handoff = this.t >= this.ball.handoffAt;
+    // Hand off as soon as the QB reaches the back (no dead wait at the mesh),
+    // with the timer as a fallback so it always happens.
+    const met = this.qb && dist(this.qb.x, this.qb.y, this.carrier.x, this.carrier.y) < (this.qb.r + this.carrier.r + 5);
+    const handoff = this.t >= this.ball.handoffAt || (this.t > 0.12 && met);
     if (handoff && this.ball.carrierId !== this.carrier.id) this.ball.carrierId = this.carrier.id;
 
     const ballX = this.carrier.x, ballY = this.carrier.y;
@@ -326,7 +332,7 @@ export class Sim {
     // The user already chose the gap pre-snap, so the back runs it automatically:
     // hit the chosen hole, then climb to daylight away from the nearest free
     // defender. Holding SPRINT (player carrier only) gives a speed burst.
-    const boost = (this.isPlayerCarrier && this.burst) ? 1.25 : 1;
+    const boost = (this.isPlayerCarrier && this.burst) ? 1.6 : 1;
     let tx, ty;
     if (c.y > this.losY - 6) { tx = this.gapX; ty = this.losY - 14; }
     else {

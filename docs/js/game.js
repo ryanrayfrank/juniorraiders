@@ -116,12 +116,19 @@ export const Game = {
     // advance to the next play (after reading the result)
     $("nextBtn").onclick = () => this.advancePlay();
 
-    // SPRINT: hold to give the ball carrier a speed burst (no steering)
+    // SPRINT: hold to give the ball carrier a speed burst (no steering).
+    // Capture the pointer so holding keeps working even if the finger/mouse
+    // drifts off the small button mid-run.
     const sb = $("sprintBtn");
-    sb.addEventListener("pointerdown", (e) => { e.preventDefault(); this.sim.setBurst(true); });
-    sb.addEventListener("pointerup", () => this.sim.setBurst(false));
-    sb.addEventListener("pointerleave", () => this.sim.setBurst(false));
-    sb.addEventListener("pointercancel", () => this.sim.setBurst(false));
+    sb.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      try { sb.setPointerCapture(e.pointerId); } catch (_) {}
+      this.sim.setBurst(true);
+    });
+    const stopBurst = () => this.sim.setBurst(false);
+    sb.addEventListener("pointerup", stopBurst);
+    sb.addEventListener("pointercancel", stopBurst);
+    sb.addEventListener("lostpointercapture", stopBurst);
 
     // keyboard: arrows move the gap selector; Space/Enter confirms the active step;
     // during the live run, holding Space sprints.
@@ -284,7 +291,10 @@ export const Game = {
     this.targetBeat = beats.length - 1; // the final HUT is the snap beat
     this.beatIdx = -1;
     // Slower, clearer cadence - especially in Teach so a beginner can follow it.
-    const d = this.level === 1 ? 1150 : (this.level === 2 ? 900 : 680);
+    // It also tracks the game-speed setting so a slower game has a slower count.
+    const base = this.level === 1 ? 1300 : (this.level === 2 ? 1000 : 800);
+    const speedFactor = 0.6 / SPEED_STATES[this.speedIdx].mult; // Normal=1, Slower=1.5, Fast=0.6
+    const d = Math.round(base * speedFactor);
     const hint = this.level === 1;
 
     const step = () => {

@@ -136,6 +136,17 @@ has since been deleted; it is not in the repo.
       got you behind the line — that's okay! Hold SPRINT the moment you get the
       ball…"), with specific fake feedback ("you pulled TWO defenders — he got X!").
 
+23. **Fake/sprint/cadence fixes** (2026-06-26):
+    - **Real runner no longer follows the fake** — the gap selector reuses
+      `sim.gapX`, so after a TB locked a fake the FB was running to the *fake*
+      hole. `lockFakeFromSelection` now restores `gapX` to the play's real hole.
+    - **SPRINT reliability** — handoff is now proximity-based (the QB hands off
+      when he reaches the back) so the back no longer freezes at the mesh waiting
+      on a timer; the burst is stronger (1.6×); the button uses pointer capture so
+      holding keeps working if the finger/mouse drifts off it.
+    - **Cadence tracks game speed** — the HUT count interval now scales with the
+      speed setting (Normal ×1, Slower ×1.5, Fast ×0.6) on top of a slower base.
+
 ## Open / not yet done
 
 - Per-position coaching for the **rest of the offense** (currently the carrier
