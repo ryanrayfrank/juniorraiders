@@ -19,6 +19,13 @@ const DESC = {
   Z: "Flanker - stalk block outside.",
 };
 
+// Readable defender names for post-play coaching explanations.
+const DEF_NAMES = {
+  E: "defensive end", N: "nose guard",
+  R: "Rover linebacker", S: "Sam linebacker", M: "Mike linebacker", W: "Will linebacker", B: "Bandit linebacker",
+  LC: "cornerback", RC: "cornerback", H: "safety",
+};
+
 // Picker layout (percent of the formation box).
 const OFF_CHIPS = [
   { l: "X", x: 7, y: 34 }, { l: "Z", x: 93, y: 34 },
@@ -173,6 +180,7 @@ export const Game = {
     this.playerCorrect = true;
     this.applyTimeScale();
     this.sim.setup(play, side, this.label, true, LEVEL_FACTOR[this.level]);
+    this.sim.gameLevel = this.level; // drives how forgiving the defense is
 
     $("gapRow").classList.remove("active");
     $("snapRow").classList.remove("active");
@@ -185,7 +193,9 @@ export const Game = {
     $("pCall").textContent = callTxt;
     const myAssign = assignmentFor(play, this.label, side);
     $("readChoices").classList.remove("active");
-    $("pTask").textContent = "You are " + this.label + " \u2014 " + myAssign + ".";
+    $("pTask").textContent = this.level === 1
+      ? this.teachBreakdown(play, myAssign)
+      : "You are " + this.label + " \u2014 " + myAssign + ".";
     $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));
 
     // Straight into the play: the ball carrier picks his gap, everyone else
@@ -199,11 +209,25 @@ export const Game = {
     $("gapRow").classList.add("active");
     $("snapRow").classList.remove("active");
     $("steerRow").classList.remove("active");
-    $("pHint").textContent = "Pick your hole \u2014 \u25c0 \u25b6 then READY";
     const hole = this.cur.play.hole;
-    $("pTask").textContent = this.level === 1
-      ? "Run the " + hole + " hole \u2014 slide to the green number."
-      : "Which hole does " + this.cur.play.num + " hit? Slide there.";
+    if (this.level === 1) {
+      // Teach: keep the full breakdown up top, put the simple action below.
+      $("pHint").textContent = "Slide \u25c0 \u25b6 to the green " + hole + ", then press READY.";
+    } else {
+      $("pHint").textContent = "Pick your hole \u2014 \u25c0 \u25b6 then READY";
+      $("pTask").textContent = "Which hole does " + this.cur.play.num + " hit? Slide there.";
+    }
+  },
+
+  // A simple, kid-friendly breakdown of the whole play for Teach (Level 1).
+  teachBreakdown(play, myAssign) {
+    const hole = play.hole;
+    if (this.label === play.carrier) {
+      if (play.type === "DIVE") return play.num + " DIVE: you're the " + this.label + ". Take the quick handoff and hit the " + hole + " hole FAST and low.";
+      if (play.type === "LEAD") return play.num + " LEAD: you're the " + this.label + ". Your fullback blocks ahead \u2014 follow right behind him through the " + hole + " hole.";
+      return play.num + " POWER: you're the " + this.label + ". Follow the pulling guard around through the " + hole + " hole.";
+    }
+    return play.num + ": you're the " + this.label + ". Your job is to " + myAssign.toLowerCase() + ". The ball goes through the " + hole + " hole.";
   },
 
   gapReady() {
@@ -231,14 +255,17 @@ export const Game = {
   startCadence() {
     $("snapRow").classList.add("active");
     $("pHint").textContent = "Snap on \u201cHUT " + this.snapCount + "\u201d! (tap SNAP or Space)";
-    $("pTask").textContent = "Listen for the count \u2014 the ball is snapped ON " + this.snapCount + ".";
+    $("pTask").textContent = this.level === 1
+      ? "Almost! Wait for \u201cHUT " + this.snapCount + ",\u201d then tap SNAP to start the play."
+      : "Listen for the count \u2014 the ball is snapped ON " + this.snapCount + ".";
     this.snapped = false;
 
     const beats = ["DOWN", "SET"];
     for (let i = 1; i <= this.snapCount; i++) beats.push("HUT " + i);
     this.targetBeat = beats.length - 1; // the final HUT is the snap beat
     this.beatIdx = -1;
-    const d = this.level === 3 ? 480 : 720;
+    // Slower, clearer cadence - especially in Teach so a beginner can follow it.
+    const d = this.level === 1 ? 1150 : (this.level === 2 ? 900 : 680);
     const hint = this.level === 1;
 
     const step = () => {
@@ -315,7 +342,6 @@ export const Game = {
     this.xpGain += Math.max(0, score);
 
     // feedback
-    const assign = assignmentFor(this.cur.play, this.label, this.cur.side);
     let head, color;
     if (r.td) { head = "TOUCHDOWN! \uD83C\uDFC8"; color = "#ffd23f"; SFX.td(); }
     else if (this.playerCorrect && r.yards > 4) { head = "+" + r.yards + " YARDS!"; color = "#27d17c"; SFX.big(); }
@@ -323,17 +349,35 @@ export const Game = {
     else { head = r.yards + " yds (loss)"; color = "#ff4d4d"; SFX.bad(); }
     this.popCombo(head, color);
 
-    const mark = this.playerCorrect ? "\u2714 " : "\u2718 ";
-    let task = mark + this.label + ": " + assign + ".";
-    if (!this.playerCorrect) task += " " + this.cur.play.coach;
-    if (this.timing === "early") task += " (False start \u2013 wait for HUT.)";
+    // Always explain WHAT happened and HOW to do better - that's the whole point.
+    let task = this.explainPlay(r);
+    if (!this.playerCorrect) task += " (Remember: " + this.cur.play.num + " hits the " + this.cur.play.hole + " hole.)";
     $("pTask").textContent = task;
     $("pTask").classList.add("flash"); this.timer(20, () => $("pTask").classList.remove("flash"));
     $("pStreak").textContent = this.streak + "\uD83D\uDD25";
 
     this.idx++;
-    const delay = r.td ? 2200 : 1900;
+    const delay = r.td ? 2800 : (this.level === 1 ? 3400 : 2300);
     this.timer(delay, () => { if (this.idx >= this.order.length) this.showResults(); else this.nextPlay(); });
+  },
+
+  // Turn the simulated result into a coaching sentence: what happened + a fix.
+  explainPlay(r) {
+    const youCarry = this.sim.isPlayerCarrier;
+    const who = r.tackler ? (DEF_NAMES[r.tackler] || "defender") : "the defense";
+    if (r.td) {
+      return youCarry
+        ? "\uD83C\uDFC8 Touchdown! You hit the hole clean and outran everyone. Perfect rep."
+        : "\uD83C\uDFC8 Touchdown! Your block sprung the runner all the way. Great job.";
+    }
+    if (youCarry) {
+      if (r.yards <= 0) return "Stuffed for " + r.yards + ". The " + who + " shot through before your blocks set up \u2014 get downhill the moment you have the ball, stay tight behind your blockers, and tap GO to burst through the hole.";
+      if (r.yards <= 3) return "+" + r.yards + ", but the " + who + " filled fast. Hit the hole quicker and tap GO to burst before it closes.";
+      if (r.yards <= 7) return "+" + r.yards + " \u2014 solid. You pressed the hole and fell forward. Steer away from the " + who + " to find a little more daylight.";
+      return "+" + r.yards + " \u2014 great run! You hit the hole and got vertical past the " + who + ".";
+    }
+    if (r.yards <= 0) return "The runner was stopped for " + r.yards + ". Drive your man out of the hole and stay on the block longer to open a lane.";
+    return "+" + r.yards + " for the runner. " + (r.yards > 6 ? "Your block helped spring him \u2014 nice work." : "Sustain your block a beat longer to open even more room.");
   },
 
   popCombo(txt, color) {

@@ -238,11 +238,16 @@ export class Sim {
     if (handoff) this.runCarrier(st);
 
     // --- defense (a short read/react beat gives the runner a head start) ---
-    const react = this.t > 0.28;
+    // Teach (L1) gives a much bigger head start and a slower pursuit so a brand
+    // new player can succeed and watch the play develop; Game (L3) is realistic.
+    const lvl = this.gameLevel || 2;
+    const reactDelay = lvl === 1 ? 0.8 : (lvl === 2 ? 0.45 : 0.28);
+    const pursuit = lvl === 1 ? 0.68 : (lvl === 2 ? 0.84 : 0.92);
+    const react = this.t > reactDelay;
     for (const d of this.defense) {
       if (d.engaged) continue;
       if (!react) { this.moveToward(d, d.x, this.losY - 20, st, 0.35); continue; }
-      this.moveToward(d, ballX, ballY, st, this.botch && d.pursuer ? 1.05 : 0.92);
+      this.moveToward(d, ballX, ballY, st, this.botch && d.pursuer ? 1.05 : pursuit);
     }
 
     // --- keep defenders from stacking (no two circles share a spot) ---

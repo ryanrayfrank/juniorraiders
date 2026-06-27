@@ -82,6 +82,18 @@ has since been deleted; it is not in the repo.
 18. **Deleted the local `input/` and `output/` folders** (2026-06-26) — no longer
     needed. They were already git-ignored (never in the repo); the `.gitignore`
     rules stay as a safety net. Docs were updated to stop referencing them.
+19. **Teaching & pacing tweaks** (2026-06-26):
+    - **Slower cadence** — the HUT count was too fast. Beat interval is now
+      per-level (Teach ~1.15s, Read ~0.9s, Game ~0.68s).
+    - **Post-play coaching** — after every play we now explain *what happened and
+      how to do better* (e.g. "the Mike linebacker filled fast — hit the hole
+      quicker and tap GO"), naming the actual tackler. This is the point of the
+      game, so it shows even when the read was correct but the gain was small.
+    - **Teach (Level 1) is now true beginner mode** — a plain-language breakdown
+      of the whole play up top ("33 LEAD: follow your fullback through the 3 hole"),
+      simple step prompts below, and a much more forgiving defense (bigger head
+      start + slower pursuit via `sim.gameLevel`) so a brand-new player succeeds
+      and learns first. Higher levels stay realistic (and explain the losses).
 
 ---
 
